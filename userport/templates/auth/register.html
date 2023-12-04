@@ -5,6 +5,7 @@
   <div class="error-msg">Error: {{error}}</div>
   {% endif %}
   <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
     <div id="register-form">
       <div class="form-group">
         <label for="first-name" class="form-label">First Name</label>
