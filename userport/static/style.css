@@ -3,7 +3,7 @@ html {
 }
 
 body {
-  font: normal 1.2rem "Work Sans", sans-serif;
+  font: normal 1.2rem "Roboto", sans-serif;
   margin: 0;
   padding: 0;
   width: 100%;
@@ -14,16 +14,27 @@ body {
   align-items: center;
 }
 
-#register-form {
+#form-div {
   width: 30%;
-  background-color: rgb(244, 244, 244);
+}
+
+.error-msg {
+  color: red;
+  margin-bottom: 10px;
+}
+
+#register-form {
+  width: 100%;
+  background-color: rgb(247, 246, 246);
   border: 1px solid #aaaaaa;
   border-radius: 10px;
   box-shadow: 10px 10px 5px #aaaaaa;
+  padding: 10px 0;
 
   display: flex;
   flex-direction: column;
   align-items: start;
+  gap: 5px;
 }
 
 .form-group {
@@ -32,6 +43,12 @@ body {
 
   display: flex;
   flex-direction: start;
+  gap: 10px;
+
+  /* To ensure width is within borders of parent div. */
+  -webkit-box-sizing: border-box; /* Safari/Chrome, other WebKit */
+  -moz-box-sizing: border-box; /* Firefox, other Gecko */
+  box-sizing: border-box; /* Opera/IE 8+ */
 }
 
 .form-label {
@@ -42,7 +59,7 @@ body {
 }
 
 .form-value {
-  flex-grow: 0.5;
+  flex-grow: 0.8;
   font-size: medium;
   border: 1px solid #aaaaaa;
   min-height: 1.5em;
