@@ -1,0 +1,12 @@
+{% extends 'base.html' %} {% block content %}
+<div id="logged-in-content">
+  <div id="left-nav">
+    <ul>
+      <li><h4>Dashboard</h4></li>
+      <li><h4>Uploads</h4></li>
+      <li><h4>Credentials</h4></li>
+    </ul>
+  </div>
+  <div id="main-content">{% block main_content %}{% endblock %}</div>
+</div>
+{% endblock %}
