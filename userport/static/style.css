@@ -14,16 +14,31 @@ body {
   align-items: center;
 }
 
+/* Registration styles */
+
 #form-div {
   width: 30%;
 }
+
+/* Login styles. */
+
+#login-container {
+  width: 30%;
+}
+
+/* Common styles */
 
 .error-msg {
   color: red;
   margin-bottom: 10px;
 }
 
-#register-form {
+.server-message {
+  color: rgb(41, 41, 219);
+  margin-bottom: 10px;
+}
+
+.form-layout {
   width: 100%;
   background-color: rgb(247, 246, 246);
   border: 1px solid #aaaaaa;
@@ -65,7 +80,7 @@ body {
   min-height: 1.5em;
 }
 
-#register-btn {
+.form-btn {
   font-size: 1.1rem;
   background-color: rgb(76, 100, 233);
   padding: 8px 8px;
@@ -74,6 +89,6 @@ body {
   color: white;
 }
 
-#register-btn:hover {
+.form-btn:hover {
   cursor: pointer;
 }

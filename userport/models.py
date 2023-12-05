@@ -1,10 +1,13 @@
 from pydantic import BaseModel, Field, ConfigDict
+from pydantic.functional_validators import BeforeValidator
 from typing import Optional, Annotated
 from datetime import datetime
 
 # Represents an ObjectId field in the database.
 # It will be represented as a `str` on the model so that it can be serialized to JSON.
-PyObjectId = Annotated[str, "MongoDB Object Id"]
+# The Before validator will convert ObjectId from DB into string so model validation does not
+# throw an error.
+PyObjectId = Annotated[str, BeforeValidator(str)]
 
 
 class UserModel(BaseModel):
@@ -21,6 +24,23 @@ class UserModel(BaseModel):
     password: str = Field(...)
     created: datetime = Field(...)
     last_updated: datetime = Field(...)
-    is_authenticated: bool = False
-    is_active: bool = False
+    authenticated: bool = False
+    active: bool = True
     email_verified: bool = False
+
+    """
+    Need to implement the following helper methods to ensure
+    Flask-login works as expected.
+    """
+
+    def get_id(self) -> str:
+        return str(self.id)
+
+    def is_authenticated(self) -> bool:
+        return self.authenticated
+
+    def is_active(self) -> bool:
+        return self.active
+
+    def is_anonymous(self) -> bool:
+        return False

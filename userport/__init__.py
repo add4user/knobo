@@ -17,5 +17,6 @@ def create_app():
     )
     app.register_blueprint(auth.bp)
     csrf.init_app(app)
+    auth.login_manager.init_app(app)
 
     return app

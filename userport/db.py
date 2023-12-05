@@ -4,6 +4,8 @@ from pymongo.server_api import ServerApi
 from pymongo.collection import Collection
 from userport.models import UserModel
 from datetime import datetime, timezone
+from bson.objectid import ObjectId
+from typing import Optional, Dict
 
 
 def get_db():
@@ -32,12 +34,26 @@ def get_users() -> Collection:
     return get_db()['users']
 
 
-def get_user(email: str):
+def get_user_by_id(user_id: str) -> Optional[UserModel]:
+    """
+    Fetch user for given ID. Returns None if no such user exists.
+    """
+    users = get_users()
+    return _user_model_from_dict(users.find_one({"_id": ObjectId(user_id)}))
+
+
+def get_user_by_email(email: str) -> Optional[UserModel]:
     """
     Fetch user with given email from users collection. Returns None if no such user exists.
     """
     users = get_users()
-    return users.find_one({"email": email})
+    return _user_model_from_dict(users.find_one({"email": email}))
+
+
+def _user_model_from_dict(user_dict: Optional[Dict]) -> Optional[UserModel]:
+    if not user_dict:
+        return None
+    return UserModel(**user_dict)
 
 
 def create_user(user_model: UserModel):
