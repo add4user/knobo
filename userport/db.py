@@ -64,5 +64,4 @@ def create_user(user_model: UserModel):
     users = get_users()
 
     user_model_dict = user_model.model_dump(exclude=['id'])
-    result = users.insert_one(user_model_dict)
-    print("created user: ", result.inserted_id)
+    users.insert_one(user_model_dict)

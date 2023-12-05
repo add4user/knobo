@@ -24,23 +24,23 @@ class UserModel(BaseModel):
     password: str = Field(...)
     created: datetime = Field(...)
     last_updated: datetime = Field(...)
-    authenticated: bool = False
     active: bool = True
     email_verified: bool = False
 
     """
     Need to implement the following helper methods to ensure
-    Flask-login works as expected.
+    Flask-login works as expected. Except for get_id and is_active other fields
+    are not used in determining authentication state of user based on testing.
     """
 
     def get_id(self) -> str:
         return str(self.id)
 
-    def is_authenticated(self) -> bool:
-        return self.authenticated
-
     def is_active(self) -> bool:
         return self.active
+
+    def is_authenticated(self) -> bool:
+        return False
 
     def is_anonymous(self) -> bool:
         return False

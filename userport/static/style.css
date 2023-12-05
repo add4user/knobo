@@ -33,9 +33,18 @@ body {
   margin-bottom: 10px;
 }
 
-.server-message {
-  color: rgb(41, 41, 219);
+.flashes {
   margin-bottom: 10px;
+  list-style-type: none;
+  padding: 0;
+}
+
+.flashes li.message {
+  color: rgb(41, 41, 219);
+}
+
+.flashes li.error {
+  color: red;
 }
 
 .form-layout {

@@ -1,4 +1,5 @@
 from . import auth
+from . import dashboard
 import os
 from flask import Flask
 from flask_wtf.csrf import CSRFProtect
@@ -16,7 +17,11 @@ def create_app():
         MONGO_DB_NAME='db'
     )
     app.register_blueprint(auth.bp)
+    app.register_blueprint(dashboard.bp)
+
     csrf.init_app(app)
     auth.login_manager.init_app(app)
+
+    app.add_url_rule('/', endpoint='index')
 
     return app
