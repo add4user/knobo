@@ -24,19 +24,69 @@ body {
   border-bottom: 2px solid slateblue;
 
   display: flex;
-  align-items: end;
 }
 
-#top-navbar h2 {
-  margin-left: 1%;
-  font-weight: bold;
-  /* text-shadow: 1px 1px rgb(179, 174, 174); */
-}
-
-#top-navbar a {
+#top-navbar #left-part a {
   color: white;
   text-decoration: none;
   letter-spacing: 1px;
+}
+
+#top-navbar #left-part {
+  width: 80%;
+  padding: 10px;
+  font-weight: bold;
+}
+
+#top-navbar #right-part {
+  width: 20%;
+
+  display: flex;
+  justify-content: end;
+}
+
+#user-account {
+  width: 45%;
+  margin-bottom: 15px;
+  margin-right: 40px;
+  text-align: center;
+  overflow-wrap: break-word;
+
+  position: relative;
+  display: inline-block;
+}
+
+#user-account > button {
+  width: 80%;
+  height: 80%;
+  left: 0;
+  bottom: 0;
+  position: absolute;
+  background-color: #4a39bb;
+  color: white;
+  font-size: 1em;
+  border: 1px solid white;
+  border-radius: 10px;
+}
+
+#user-account > button:hover {
+  cursor: pointer;
+}
+
+.user-account-dropdown-content {
+  display: none;
+  position: absolute;
+  left: 0;
+  top: 100%;
+  width: 80%;
+  background-color: rgb(241, 239, 239);
+  padding: 20px 0px;
+  border: 1px solid rgb(166, 166, 166);
+}
+
+.user-account-dropdown-content a {
+  text-decoration: none;
+  color: #3969bb;
 }
 
 #main {
@@ -157,6 +207,10 @@ body {
 
 .form-other-link {
   color: rgb(76, 100, 233);
+}
+
+.show {
+  display: block;
 }
 
 /* Logged In Content */

@@ -1,2 +1,9 @@
-{% extends 'application/left-nav.html' %} {% block main_content %} {% endblock
-%}
+{% extends 'application/left-nav.html' %} {% block user_account %}
+<div id="user-account">
+  <button>{{ current_user.first_name }}</button>
+  <!-- <button>Sivaramakrishnan</button> -->
+  <div class="user-account-dropdown-content">
+    <a href="/auth/logout">Logout</a>
+  </div>
+</div>
+{% endblock %} {% block main_content %} {% endblock %}

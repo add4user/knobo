@@ -7,6 +7,11 @@ from flask_login import LoginManager, login_user, logout_user, current_user, Ano
 bp = Blueprint('auth', __name__, url_prefix='/auth')
 login_manager = LoginManager()
 
+# We want strong session protection so that if the user's identifier does not match,
+# the session is deleted immediately per
+# https://flask-login.readthedocs.io/en/latest/#session-protection.
+login_manager.session_protection = 'strong'
+
 
 @bp.route('/register', methods=['GET', 'POST'])
 def register():
