@@ -6,5 +6,5 @@ bp = Blueprint('application', __name__)
 
 @bp.route('/', methods=['GET'])
 @login_required
-def index():
-    return render_template('application/index.html')
+def uploads_view():
+    return render_template('application/uploads.html')

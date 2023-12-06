@@ -1,0 +1,28 @@
+{% extends 'base.html' %} {% block user_account %}
+<div id="user-account">
+  <button>{{ current_user.first_name }}</button>
+  <div class="user-account-dropdown-content">
+    <a href="/auth/logout">Logout</a>
+  </div>
+</div>
+{% endblock %} {% block content %}
+<div id="logged-in-content">
+  <div id="left-nav">
+    <ul>
+      <li class="active">
+        <h4><a href="#">Uploads</a></h4>
+      </li>
+      <li>
+        <h4><a href="#">API Key</a></h4>
+      </li>
+      <li>
+        <h4><a href="#">Dashboard</a></h4>
+      </li>
+      <li>
+        <h4><a href="#">Billing</a></h4>
+      </li>
+    </ul>
+  </div>
+  <div id="main-content">{% block main_content %}{% endblock %}</div>
+</div>
+{% endblock %}
