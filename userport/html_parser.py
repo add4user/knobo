@@ -1,8 +1,7 @@
 from html.parser import HTMLParser
 from bs4 import BeautifulSoup
-from text_node import Node
+from userport.html_node import HTMLNode
 from typing import List, Optional
-import requests
 
 
 class CustomHTMLParser(HTMLParser):
@@ -10,26 +9,43 @@ class CustomHTMLParser(HTMLParser):
     Parses HTML page and stores them as heirarchical text sections.
     """
 
-    def __init__(self, *, convert_charrefs: bool = True) -> None:
+    def __init__(self, *, convert_charrefs: bool = True, html_page: str) -> None:
         super().__init__(convert_charrefs=convert_charrefs)
         self.first_tag_to_start_parsing: str = None
         self.start_parsing = False
         self.end_parsing = False
         # Tracks list of active heading nodes in the document.
-        self.active_heading_nodes: List[Node] = []
+        self.active_heading_nodes: List[HTMLNode] = []
         # Root Text Node.
-        self.root_node: Node = Node(tag_name='root')
+        self.root_node: HTMLNode = HTMLNode(tag_name='root')
         # Unwanted tags that we don't want to parse data of.
         self.unwanted_tags = set({'script', 'style', 'hr'})
         self.unwanted_tag_in_progress = False
         # Current nodes in progress. Popped after end tag.
-        self.current_open_nodes: List[Node] = []
+        self.current_open_nodes: List[HTMLNode] = []
+        # Store HTML page.
+        self.html_page = html_page
 
-    def find_starting_heading_tag(self, html_page: str):
+        self._find_starting_heading_tag()
+
+    def get_html_page(self) -> str:
+        """
+        Returns stored HTML page that is being parsed.
+        """
+        return self.html_page
+
+    def get_root_node(self) -> HTMLNode:
+        """
+        Returns node after HTML page is parsed.
+        """
+        assert self.end_parsing, "HTML page not parsed yet."
+        return self.root_node
+
+    def _find_starting_heading_tag(self):
         """
         Finds first of h1,h2, h3 or h4 tags. If none found, throws an error.
         """
-        soup = BeautifulSoup(html_page, 'html.parser')
+        soup = BeautifulSoup(self.html_page, 'html.parser')
         if soup.find('h1'):
             self.first_tag_to_start_parsing = 'h1'
         elif soup.find('h2'):
@@ -68,7 +84,7 @@ class CustomHTMLParser(HTMLParser):
             return
 
         if tag.startswith('h') or tag in set({'p', 'ul', 'ol', 'li', 'a', 'em', 'pre', 'dl', 'dt', 'dd'}):
-            new_node = Node(tag_name=tag)
+            new_node = HTMLNode(tag_name=tag)
 
             # Add <a> tag URL to the node if it exists.
             if tag == 'a':
@@ -91,7 +107,7 @@ class CustomHTMLParser(HTMLParser):
 
             # Might be text directly inside a <div>.
             # We should create a placeholder <p> node to handle this.
-            placeholder_node = Node(tag_name='p', placeholder=True)
+            placeholder_node = HTMLNode(tag_name='p', placeholder=True)
             self.current_open_nodes.append(placeholder_node)
 
         # Append data to last current ndoe.
@@ -101,7 +117,7 @@ class CustomHTMLParser(HTMLParser):
             last_node.child_nodes[-1].text += data
         else:
             # Create new text node and append to last node's children.
-            text_only_node = Node(text=data)
+            text_only_node = HTMLNode(text=data)
             last_node.child_nodes.append(text_only_node)
 
     def handle_endtag(self, tag):
@@ -141,7 +157,7 @@ class CustomHTMLParser(HTMLParser):
                 # Only heading nodes can be parent nodes.
                 self.active_heading_nodes.append(last_node)
 
-    def _get_parent_heading_node(self, current_tag: str) -> Optional[Node]:
+    def _get_parent_heading_node(self, current_tag: str) -> Optional[HTMLNode]:
         """
         Returns parent heading node of given heading tag
         """
@@ -183,26 +199,27 @@ class CustomHTMLParser(HTMLParser):
         return False
 
     @staticmethod
-    def _add_url_to_node(node: Node, attrs) -> Node:
+    def _add_url_to_node(node: HTMLNode, attrs) -> HTMLNode:
         for attr in attrs:
             if 'href' in attr[0]:
                 node.url = attr[1]
         return node
 
 
-def parse_html(html_page: str):
-    parser = CustomHTMLParser()
-    parser.find_starting_heading_tag(html_page)
-    parser.feed(html_page)
+def parse_html(html_page: str) -> HTMLNode:
+    """
+    Parse HTML and returns root node.
+    """
+    parser = CustomHTMLParser(html_page=html_page)
+    parser.feed(parser.get_html_page())
 
-    print(parser.root_node.to_str())
-    # print_node_heirarchy(parser.root_node)
+    return parser.get_root_node()
 
 
-def print_node_heirarchy(node: Node, indent=""):
+def _print_node_heirarchy(node: HTMLNode, indent=""):
     """
     Prints list of nodes and child nodes with indentation
-    so the parsing algorithm can be debugged.
+    so the parsing algorithm can be debugged. Only for debugging.
     """
     print(indent, node.tag_name, " placeholder: ", node.placeholder)
     indent += "  "
@@ -210,23 +227,18 @@ def print_node_heirarchy(node: Node, indent=""):
         if child_node.tag_name == None:
             print(indent, repr(child_node.text))
         else:
-            print_node_heirarchy(child_node, indent)
+            _print_node_heirarchy(child_node, indent)
 
 
-def fetch_html_page(url: str) -> str:
-    response = requests.get(url)
-    content_type: str = response.headers['content-type']
-    if "text/html" not in content_type:
-        raise ValueError(
-            f'Invalid Content Type; expected text/html, got {content_type}')
-    return response.text
-
-
-# url = 'https://requests.readthedocs.io/en/latest/user/quickstart/'
-# url = 'https://flask.palletsprojects.com/en/3.0.x/tutorial/layout/'
-# url = 'https://flask.palletsprojects.com/en/3.0.x/tutorial/factory/'
-# url = 'https://docs.python.org/3/library/html.parser.html'
-# url = 'https://www.mongodb.com/docs/atlas/tutorial/test-resilience/test-primary-failover/'
-url = 'https://www.mongodb.com/docs/compass/current/indexes/create-search-index/'
-html_page = fetch_html_page(url)
-parse_html(html_page)
+if __name__ == "__main__":
+    from userport.utils import fetch_html_page
+    # url = 'https://requests.readthedocs.io/en/latest/user/quickstart/'
+    # url = 'https://flask.palletsprojects.com/en/3.0.x/tutorial/layout/'
+    # url = 'https://flask.palletsprojects.com/en/3.0.x/tutorial/factory/'
+    # url = 'https://docs.python.org/3/library/html.parser.html'
+    url = 'https://www.mongodb.com/docs/atlas/tutorial/test-resilience/test-primary-failover/'
+    # url = 'https://www.mongodb.com/docs/compass/current/indexes/create-search-index/'
+    html_page = fetch_html_page(url)
+    root_node = parse_html(html_page)
+    print(root_node.to_str())
+    # _print_node_heirarchy(root_node)

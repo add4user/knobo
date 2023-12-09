@@ -4,7 +4,10 @@ import textwrap
 
 
 @dataclass
-class Node:
+class HTMLNode:
+    """
+    Representation of a tag or raw string within a HTML document.
+    """
     # Name of tag (h, p, a, ul, li etc.) or None if it is a string node.
     tag_name: str = None
     # Applies to only string nodes.
@@ -14,14 +17,14 @@ class Node:
     # Whether this node is a placeholder or not. Used by parser.
     placeholder: bool = False
     # Only applicable to tag nodes (h, p, a, ul, li etc.)
-    child_nodes: List['Node'] = field(default_factory=list)
+    child_nodes: List['HTMLNode'] = field(default_factory=list)
 
     # Delta indentation at each child.
     delta_indentation = " "
 
     def to_str(self, indentation: str = "") -> str:
         """
-        Return string representation of the node.
+        Return string representation of the node and its childresn.
         """
         if self.tag_name == None:
             # We want to replace intra string new lines with spaces.
@@ -35,7 +38,7 @@ class Node:
         list_number: int = 1
         for child_node in self.child_nodes:
             val = child_node.to_str(
-                indentation=indentation + Node.delta_indentation)
+                indentation=indentation + HTMLNode.delta_indentation)
 
             if child_node.tag_name == None and self.tag_name != 'pre':
                 # This is a text string.
