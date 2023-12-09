@@ -11,55 +11,75 @@ class Node:
     text: str = None
     # Applies to a ang img nodes.
     url: str = None
-    # Identation applied to ul or ol nodes.
-    indentation: str = ""
+    # Whether this node is a placeholder or not. Used by parser.
+    placeholder: bool = False
     # Only applicable to tag nodes (h, p, a, ul, li etc.)
     child_nodes: List['Node'] = field(default_factory=list)
 
-    def to_str(self) -> str:
+    # Delta indentation at each child.
+    delta_indentation = " "
+
+    def to_str(self, indentation: str = "") -> str:
         """
         Return string representation of the node.
         """
         if self.tag_name == None:
+            # We want to replace intra string new lines with spaces.
             return self.text
+            # Uncomment this for debugging purposes.
+            # return repr(self.text)
 
         # Fetch string values of children.
         child_str_list: List[str] = []
         bullet_point: str = "\u2022"
+        list_number: int = 1
         for child_node in self.child_nodes:
-            val = child_node.to_str()
-            if child_node.tag_name == 'li':
-                if self.tag_name == 'ul' or self.tag_name == 'ol':
-                    # TODO: Add numbers for ol.
-                    # prepend_text: str = bullet_point if tag.name == "ul" else f"{str(list_count)}."
-                    val = f'{bullet_point} {val}'
+            val = child_node.to_str(
+                indentation=indentation + Node.delta_indentation)
 
-            if self.tag_name.startswith('h') and child_node.tag_name == None:
-                # Add new line for the title.
-                val = f'{val}\n\n'
+            if child_node.tag_name == None and self.tag_name != 'pre':
+                # This is a text string.
+                # If not preformatted, replace newlines within the string.
+                val = val.replace('\n', ' ')
+
+            # Add bullet points to <li> elements.
+            if (child_node.tag_name == 'li' and self.tag_name == 'ul') or \
+                    (child_node.tag_name == 'dt' and self.tag_name == 'dl'):
+                val = f'\n\n{bullet_point} {val.lstrip()}'
+            elif child_node.tag_name == 'li' and self.tag_name == 'ol':
+                val = f'\n\n{str(list_number)}. {val.lstrip()}'
+                list_number += 1
 
             child_str_list.append(val)
-
-        if self.tag_name == 'p':
-            child_str_list.append("\n\n")
-            # if self.child_nodes[0].text == 'On this page':
-            #     print("BROOO")
-            #     print(child_str_list)
 
         child_str = "".join(child_str_list)
 
         if self.tag_name == 'a' and self.url:
-            return f'{child_str} ({self.url})'
+            child_str = f'{child_str} ({self.url})'
         elif self.tag_name == 'img' and self.url:
-            return f'Reference Image: {self.url} {child_str}'
+            child_str = f'Reference Image: {self.url} {child_str}'
         elif self.tag_name == 'em':
-            return f'`{child_str}`'
-        elif self.tag_name == 'b' or self.tag_name == 'strong':
-            return f'"{child_str}"'
-        elif self.tag_name == 'li':
+            child_str = f'`{child_str}`'
+        elif self.tag_name == 'pre':
+            child_str = f'\n\n```\n{child_str}```'
+        elif self.tag_name == 'li' or self.tag_name == 'dt' or self.tag_name == 'dd':
             # Add new lines to separate from next list item.
-            return f'{child_str}\n\n'
-        elif self.tag_name == 'ul' or self.tag_name == 'ol':
-            return f'{textwrap.indent(child_str, prefix=self.indentation)}\n\n'
+            child_str = f'{child_str}'
+        elif self.tag_name == 'ul' or self.tag_name == 'ol' or self.tag_name == 'dl':
+            # return f'\n{textwrap.indent(child_str, prefix=self.indentation)}'
+            child_str = f'\n{child_str}'
+        elif self.tag_name == 'p':
+            # The new lines help leave a blank line before the next tag's string.
+            # This may end up leaving more new lines when enclosed inside an <li>
+            # tag since we are adding new blank line after that tag as well.
+            child_str = f'\n\n{child_str}'
+        elif self.tag_name.startswith('h'):
+            if self.tag_name == 'h2':
+                # TODO: This tag_name should be dynamic i.e.
+                # whatever is the second highest heading in the
+                # specific HTML file.
+                child_str = f'\n\n\n\n{child_str}'
+            else:
+                child_str = f'\n\n{child_str}'
 
-        return child_str
+        return textwrap.indent(child_str, indentation)

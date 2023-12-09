@@ -20,7 +20,7 @@ class CustomHTMLParser(HTMLParser):
         # Root Text Node.
         self.root_node: Node = Node(tag_name='root')
         # Unwanted tags that we don't want to parse data of.
-        self.unwanted_tags = set({'script', 'style'})
+        self.unwanted_tags = set({'script', 'style', 'hr'})
         self.unwanted_tag_in_progress = False
         # Current nodes in progress. Popped after end tag.
         self.current_open_nodes: List[Node] = []
@@ -46,6 +46,9 @@ class CustomHTMLParser(HTMLParser):
     """
 
     def handle_starttag(self, tag, attrs):
+        """
+        Callback for when a new tag is encountered.
+        """
         if self.end_parsing:
             return
 
@@ -64,24 +67,47 @@ class CustomHTMLParser(HTMLParser):
             self.unwanted_tag_in_progress = True
             return
 
-        if tag.startswith('h') or tag in set({'p', 'ul', 'ol', 'li', 'a'}):
+        if tag.startswith('h') or tag in set({'p', 'ul', 'ol', 'li', 'a', 'em', 'pre', 'dl', 'dt', 'dd'}):
             new_node = Node(tag_name=tag)
+
+            # Add <a> tag URL to the node if it exists.
+            if tag == 'a':
+                new_node = CustomHTMLParser._add_url_to_node(
+                    node=new_node, attrs=attrs)
+
             self.current_open_nodes.append(new_node)
 
     def handle_data(self, data):
+        """
+        Callback when new data is received.
+        """
         if not self.start_parsing or self.end_parsing or self.unwanted_tag_in_progress:
             return
-        # Append data to last node's children.
-        text_only_node = Node(text=data)
+
         if len(self.current_open_nodes) == 0:
-            # Edge case, skip for now.
-            # TODO: handle this.
-            print("Found no nodes for: ", data)
-            return
+            if data.strip() == "":
+                # Unncessary newlines or whitespaces. Skip storing in placeholder.
+                return
+
+            # Might be text directly inside a <div>.
+            # We should create a placeholder <p> node to handle this.
+            placeholder_node = Node(tag_name='p', placeholder=True)
+            self.current_open_nodes.append(placeholder_node)
+
+        # Append data to last current ndoe.
         last_node = self.current_open_nodes[-1]
-        last_node.child_nodes.append(text_only_node)
+        if len(last_node.child_nodes) > 0 and last_node.child_nodes[-1].tag_name == None:
+            # If last child node is a pure string, just append to it instead of creating a new node.
+            last_node.child_nodes[-1].text += data
+        else:
+            # Create new text node and append to last node's children.
+            text_only_node = Node(text=data)
+            last_node.child_nodes.append(text_only_node)
 
     def handle_endtag(self, tag):
+        """
+        Callback when an endtag is encountered.
+        """
         if not self.start_parsing or self.end_parsing:
             return
         if tag in self.unwanted_tags:
@@ -93,25 +119,29 @@ class CustomHTMLParser(HTMLParser):
             return
 
         last_node = self.current_open_nodes[-1]
-        if tag != last_node.tag_name:
-            # Do nothing.
+        if not last_node.placeholder and tag != last_node.tag_name:
+            # Do nothing since this tag doesn't match last node's tag.
+            # When last node is a placeholder, we don't expect a match
+            # since the node was created by us.
             return
+
         self.current_open_nodes.pop()
         if len(self.current_open_nodes) > 0:
-            # Add as child to prev parent.
+            # Add as child to prev open node.
             self.current_open_nodes[-1].child_nodes.append(last_node)
         else:
-            # Find parent from heading nodes and link them.
-            parent_heading_node = self.get_parent_heading_node(tag)
+            # Find parent from active heading nodes and link them.
+            parent_heading_node = self._get_parent_heading_node(tag)
             if not parent_heading_node:
                 parent_heading_node = self.root_node
 
             parent_heading_node.child_nodes.append(last_node)
 
             if tag.startswith("h"):
+                # Only heading nodes can be parent nodes.
                 self.active_heading_nodes.append(last_node)
 
-    def get_parent_heading_node(self, current_tag: str) -> Optional[Node]:
+    def _get_parent_heading_node(self, current_tag: str) -> Optional[Node]:
         """
         Returns parent heading node of given heading tag
         """
@@ -145,10 +175,19 @@ class CustomHTMLParser(HTMLParser):
             return True
         for attr in attrs:
             _, values = attr
+            if not values:
+                continue
             if footer_keyword in set(values.split()):
                 return True
 
         return False
+
+    @staticmethod
+    def _add_url_to_node(node: Node, attrs) -> Node:
+        for attr in attrs:
+            if 'href' in attr[0]:
+                node.url = attr[1]
+        return node
 
 
 def parse_html(html_page: str):
@@ -165,11 +204,11 @@ def print_node_heirarchy(node: Node, indent=""):
     Prints list of nodes and child nodes with indentation
     so the parsing algorithm can be debugged.
     """
-    print(indent, node.tag_name)
+    print(indent, node.tag_name, " placeholder: ", node.placeholder)
     indent += "  "
     for child_node in node.child_nodes:
         if child_node.tag_name == None:
-            print(indent, child_node.text)
+            print(indent, repr(child_node.text))
         else:
             print_node_heirarchy(child_node, indent)
 
@@ -183,13 +222,11 @@ def fetch_html_page(url: str) -> str:
     return response.text
 
 
-def save_to_file(html_page: str):
-    with open('test_html.txt', 'w') as f:
-        f.write(html_page)
-
-
 # url = 'https://requests.readthedocs.io/en/latest/user/quickstart/'
+# url = 'https://flask.palletsprojects.com/en/3.0.x/tutorial/layout/'
+# url = 'https://flask.palletsprojects.com/en/3.0.x/tutorial/factory/'
+# url = 'https://docs.python.org/3/library/html.parser.html'
+# url = 'https://www.mongodb.com/docs/atlas/tutorial/test-resilience/test-primary-failover/'
 url = 'https://www.mongodb.com/docs/compass/current/indexes/create-search-index/'
 html_page = fetch_html_page(url)
 parse_html(html_page)
-save_to_file(html_page)
