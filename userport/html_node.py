@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 from typing import List
+from queue import Queue
 import textwrap
 
 
@@ -12,7 +13,7 @@ class HTMLNode:
     tag_name: str = None
     # Applies to only string nodes.
     text: str = None
-    # Applies to a ang img nodes.
+    # Applies to <a> or <img> nodes.
     url: str = None
     # Whether this node is a placeholder or not. Used by parser.
     placeholder: bool = False
@@ -60,7 +61,7 @@ class HTMLNode:
         if self.tag_name == 'a' and self.url:
             child_str = f'{child_str} ({self.url})'
         elif self.tag_name == 'img' and self.url:
-            child_str = f'Reference Image: {self.url} {child_str}'
+            child_str = f'\n\nReference Image: {self.url} {child_str}'
         elif self.tag_name == 'em':
             child_str = f'`{child_str}`'
         elif self.tag_name == 'pre':
@@ -86,3 +87,67 @@ class HTMLNode:
                 child_str = f'\n\n{child_str}'
 
         return textwrap.indent(child_str, indentation)
+
+
+@dataclass
+class HTMLSection:
+    """
+    Representation of a section on a HTML Page. A section consits of formatted text
+    as well as child sections. Do not instantiate this class directly.
+    """
+    # Text in the section. The text includes the section title as well.
+    text: str = ""
+    # Child sections under this section.
+    child_sections: List['HTMLSection'] = field(default_factory=list)
+
+
+def convert_to_sections(root_node: HTMLNode, max_depth: int = 1) -> HTMLSection:
+    """
+    Convert given HTML Nodes sections and returns the root section. HTMLSections contain information
+    that will be stored in the database as a representation of the page.
+
+    Max depth represents the maximum depth from given root node that BFS will
+    traverse to generate new sections. The default is 1 i.e. only upto
+    the first set of child nodes.
+    """
+    assert root_node.tag_name.startswith(
+        'root'), f"Invalid tag name: {root_node.tag_name}, expected 'root'"
+    q = Queue()
+    root_section = HTMLSection(text='root')
+    for cnode in root_node.child_nodes:
+        q.put((cnode, root_section))
+
+    current_depth = 1
+    while not q.empty():
+        qVal = q.get()
+        node: HTMLNode = qVal[0]
+        parent_section: HTMLSection = qVal[1]
+
+        max_depth_exceeded = True if current_depth > max_depth else False
+        child_heading_nodes: List[HTMLNode] = []
+        text_list: List[str] = []
+        for child_node in node.child_nodes:
+            if max_depth_exceeded:
+                text_list.append(child_node.to_str())
+                continue
+
+            # Max depth not exceeded, separate heading nodes into a new section.
+            if child_node.tag_name and child_node.tag_name.startswith('h'):
+                child_heading_nodes.append(child_node)
+                continue
+
+            text_list.append(child_node.to_str())
+
+        html_section = HTMLSection()
+        html_section.text = "".join(text_list)
+        if parent_section:
+            parent_section.child_sections.append(html_section)
+
+        if not max_depth_exceeded:
+            # BFS on child nodes.
+            for child_heading_node in child_heading_nodes:
+                q.put((child_heading_node, html_section))
+
+            current_depth += 1
+
+    return root_section

@@ -1,7 +1,8 @@
 from html.parser import HTMLParser
 from bs4 import BeautifulSoup
-from userport.html_node import HTMLNode
+from userport.html_node import HTMLNode, HTMLSection, convert_to_sections
 from typing import List, Optional
+from urllib.parse import urljoin
 
 
 class CustomHTMLParser(HTMLParser):
@@ -9,7 +10,7 @@ class CustomHTMLParser(HTMLParser):
     Parses HTML page and stores them as heirarchical text sections.
     """
 
-    def __init__(self, *, convert_charrefs: bool = True, html_page: str) -> None:
+    def __init__(self, *, convert_charrefs: bool = True, html_page: str, page_url: str) -> None:
         super().__init__(convert_charrefs=convert_charrefs)
         self.first_tag_to_start_parsing: str = None
         self.start_parsing = False
@@ -25,6 +26,8 @@ class CustomHTMLParser(HTMLParser):
         self.current_open_nodes: List[HTMLNode] = []
         # Store HTML page.
         self.html_page = html_page
+        # URL of the HTML page.
+        self.page_url = page_url
 
         self._find_starting_heading_tag()
 
@@ -83,13 +86,16 @@ class CustomHTMLParser(HTMLParser):
             self.unwanted_tag_in_progress = True
             return
 
-        if tag.startswith('h') or tag in set({'p', 'ul', 'ol', 'li', 'a', 'em', 'pre', 'dl', 'dt', 'dd'}):
+        if tag.startswith('h') or tag in set({'p', 'ul', 'ol', 'li', 'a', 'em', 'pre', 'dl', 'dt', 'dd', 'img'}):
             new_node = HTMLNode(tag_name=tag)
 
-            # Add <a> tag URL to the node if it exists.
-            if tag == 'a':
-                new_node = CustomHTMLParser._add_url_to_node(
-                    node=new_node, attrs=attrs)
+            # Add <a> or <img> tag URL to the node if it exists.
+            attr_to_check = 'href' if tag == 'a' else 'src'
+            url_val = CustomHTMLParser._get_url_from_attrs(
+                attr_to_check, attrs)
+            if url_val:
+                # Make URL absolute before storing in the node.
+                new_node.url = urljoin(self.page_url, url_val)
 
             self.current_open_nodes.append(new_node)
 
@@ -199,21 +205,26 @@ class CustomHTMLParser(HTMLParser):
         return False
 
     @staticmethod
-    def _add_url_to_node(node: HTMLNode, attrs) -> HTMLNode:
+    def _get_url_from_attrs(key: str, attrs) -> Optional[str]:
+        """
+        Get URL associated with given attribute if it is exists
+        else returns None.
+        """
         for attr in attrs:
-            if 'href' in attr[0]:
-                node.url = attr[1]
-        return node
+            if key == attr[0]:
+                return attr[1]
+        return None
 
 
-def parse_html(html_page: str) -> HTMLNode:
+def parse_html(html_page: str, page_url: str) -> HTMLSection:
     """
-    Parse HTML and returns root node.
+    Parse HTML and returns root section.
     """
-    parser = CustomHTMLParser(html_page=html_page)
+    parser = CustomHTMLParser(html_page=html_page, page_url=page_url)
     parser.feed(parser.get_html_page())
 
-    return parser.get_root_node()
+    root_node = parser.get_root_node()
+    return convert_to_sections(root_node=root_node, max_depth=1)
 
 
 def _print_node_heirarchy(node: HTMLNode, indent=""):
@@ -232,13 +243,24 @@ def _print_node_heirarchy(node: HTMLNode, indent=""):
 
 if __name__ == "__main__":
     from userport.utils import fetch_html_page
+    from queue import Queue
     # url = 'https://requests.readthedocs.io/en/latest/user/quickstart/'
     # url = 'https://flask.palletsprojects.com/en/3.0.x/tutorial/layout/'
     # url = 'https://flask.palletsprojects.com/en/3.0.x/tutorial/factory/'
     # url = 'https://docs.python.org/3/library/html.parser.html'
-    url = 'https://www.mongodb.com/docs/atlas/tutorial/test-resilience/test-primary-failover/'
+    # url = 'https://www.mongodb.com/docs/atlas/tutorial/test-resilience/test-primary-failover/'
+    # url = 'https://www.mongodb.com/docs/atlas/tutorial/create-atlas-account/'
     # url = 'https://www.mongodb.com/docs/compass/current/indexes/create-search-index/'
+    # url = 'https://www.mongodb.com/docs/atlas/tutorial/connect-to-your-cluster/'
+    url = 'https://flask.palletsprojects.com/en/3.0.x/quickstart/'
     html_page = fetch_html_page(url)
-    root_node = parse_html(html_page)
-    print(root_node.to_str())
-    # _print_node_heirarchy(root_node)
+    root_section = parse_html(html_page=html_page, page_url=url)
+    q = Queue()
+    for csection in root_section.child_sections:
+        q.put(csection)
+    while not q.empty():
+        sec: HTMLSection = q.get()
+        print(sec.text)
+        print("\n\n-------------------------------\n\n")
+        for csec in sec.child_sections:
+            q.put(csec)
