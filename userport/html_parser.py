@@ -86,7 +86,7 @@ class CustomHTMLParser(HTMLParser):
             self.unwanted_tag_in_progress = True
             return
 
-        if tag.startswith('h') or tag in set({'p', 'ul', 'ol', 'li', 'a', 'em', 'pre', 'dl', 'dt', 'dd', 'img'}):
+        if tag.startswith('h') or tag in set({'p', 'ul', 'ol', 'li', 'a', 'em', 'pre', 'dl', 'dt', 'dd', 'img', 'strong', 'b'}):
             new_node = HTMLNode(tag_name=tag)
 
             # Add <a> or <img> tag URL to the node if it exists.
@@ -98,6 +98,10 @@ class CustomHTMLParser(HTMLParser):
                 new_node.url = urljoin(self.page_url, url_val)
 
             self.current_open_nodes.append(new_node)
+
+        if tag == 'img':
+            # <img> tags won't close, just force close them now.
+            self.handle_endtag('img')
 
     def handle_data(self, data):
         """
@@ -196,7 +200,9 @@ class CustomHTMLParser(HTMLParser):
         if tag == footer_keyword:
             return True
         for attr in attrs:
-            _, values = attr
+            attr_key, values = attr
+            if attr_key != "class":
+                continue
             if not values:
                 continue
             if footer_keyword in set(values.split()):
@@ -252,7 +258,10 @@ if __name__ == "__main__":
     # url = 'https://www.mongodb.com/docs/atlas/tutorial/create-atlas-account/'
     # url = 'https://www.mongodb.com/docs/compass/current/indexes/create-search-index/'
     # url = 'https://www.mongodb.com/docs/atlas/tutorial/connect-to-your-cluster/'
-    url = 'https://flask.palletsprojects.com/en/3.0.x/quickstart/'
+    # url = 'https://flask.palletsprojects.com/en/3.0.x/quickstart/'
+    # url = 'https://support.atlassian.com/jira-software-cloud/docs/what-are-team-managed-and-company-managed-projects/'
+    # url = 'https://support.atlassian.com/jira-software-cloud/docs/search-for-issues-in-a-project/'
+    url = 'https://support.atlassian.com/jira-software-cloud/docs/navigate-to-your-work/'
     html_page = fetch_html_page(url)
     root_section = parse_html(html_page=html_page, page_url=url)
     q = Queue()

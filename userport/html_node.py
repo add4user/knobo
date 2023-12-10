@@ -64,6 +64,8 @@ class HTMLNode:
             child_str = f'\n\nReference Image: {self.url} {child_str}'
         elif self.tag_name == 'em':
             child_str = f'`{child_str}`'
+        elif self.tag_name in set({'strong', 'b'}):
+            child_str = f'"{child_str}"'
         elif self.tag_name == 'pre':
             child_str = f'\n\n```\n{child_str}```'
         elif self.tag_name == 'li' or self.tag_name == 'dt' or self.tag_name == 'dd':
@@ -78,13 +80,7 @@ class HTMLNode:
             # tag since we are adding new blank line after that tag as well.
             child_str = f'\n\n{child_str}'
         elif self.tag_name.startswith('h'):
-            if self.tag_name == 'h2':
-                # TODO: This tag_name should be dynamic i.e.
-                # whatever is the second highest heading in the
-                # specific HTML file.
-                child_str = f'\n\n\n\n{child_str}'
-            else:
-                child_str = f'\n\n{child_str}'
+            child_str = f'\n\n\n\n{child_str}'
 
         return textwrap.indent(child_str, indentation)
 
