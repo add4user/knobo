@@ -24,18 +24,18 @@ class PageSection:
     child_sections: List['PageSection'] = field(default_factory=list)
 
 
-class IndexPage:
+class PageSectionManager:
     """
-    Fetch page with given URL and returns tree of sections that can be written to the database.
+    Create tree of page sections from given URL so it can be written to the database.
     """
 
     def __init__(self) -> None:
         self.text_analyzer = TextAnalyzer()
         self.summary_of_sections_so_far: str = ""
 
-    def run(self, url: str) -> PageSection:
+    def fetch(self, url: str) -> PageSection:
         """
-        Index given page URL and returns root page section.
+        Fetch root page section from given page URL.
         """
         html_page = ""
         try:
@@ -60,7 +60,7 @@ class IndexPage:
             page_section = self._generate_metadata(child_section)
             root_page_section.child_sections.append(page_section)
 
-        root_page_section = IndexPage._populate_all_proper_nouns_in_each_section(
+        root_page_section = PageSectionManager._populate_all_proper_nouns_in_each_section(
             root_page_section)
 
         return root_page_section
@@ -147,7 +147,7 @@ class IndexPage:
 
 
 if __name__ == "__main__":
-    indexer = IndexPage()
+    section_manager = PageSectionManager()
 
     url = 'https://support.atlassian.com/jira-software-cloud/docs/navigate-to-your-work/'
-    indexer.run(url)
+    section_manager.fetch(url)
