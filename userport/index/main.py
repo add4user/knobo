@@ -4,6 +4,7 @@ from userport.index.html_node import HTMLSection
 from userport.index.text_analyzer import TextAnalyzer
 from typing import List
 from dataclasses import dataclass, field
+from queue import Queue
 
 
 @dataclass
@@ -31,7 +32,6 @@ class IndexPage:
     def __init__(self) -> None:
         self.text_analyzer = TextAnalyzer()
         self.summary_of_sections_so_far: str = ""
-        self.debug_count = 0
 
     def run(self, url: str) -> PageSection:
         """
@@ -57,14 +57,15 @@ class IndexPage:
 
         root_page_section = PageSection(is_root=True)
         for child_section in root_section.child_sections:
-            page_section = self.traverse(child_section)
+            page_section = self._generate_metadata(child_section)
             root_page_section.child_sections.append(page_section)
 
-        # TODO: populate important entities of each page section.
+        root_page_section = IndexPage._populate_all_proper_nouns_in_each_section(
+            root_page_section)
 
         return root_page_section
 
-    def traverse(self, section: HTMLSection) -> PageSection:
+    def _generate_metadata(self, section: HTMLSection) -> PageSection:
         """
         Recursively traverses sections and generates summary, embedding and important entities for each section.
         Returns associated page section at the same level as given input HTMLSection.
@@ -100,12 +101,49 @@ class IndexPage:
                                    summary_vector_embedding=summary_vector_embedding, proper_nouns_in_section=proper_nouns_in_section)
 
         for child_section in section.child_sections:
-            child_page_section = self.traverse(child_section)
+            child_page_section = self._generate_metadata(child_section)
 
             # Add children from traversal to the tree.
             page_section.child_sections.append(child_page_section)
 
         return page_section
+
+    @staticmethod
+    def _populate_all_proper_nouns_in_each_section(root_page_section: PageSection):
+        """
+        Aggregate proper nouns from each section and then write it back to each section.
+        This is similar to denormalization to ensure during search we can use this field
+        as filter in the aggregation pipeline. Returns the same root section as result.
+        """
+        assert root_page_section.is_root, f"Expected root page section, got {root_page_section}"
+
+        q = Queue()
+        for child_section in root_page_section.child_sections:
+            q.put(child_section)
+
+        all_proper_nouns: List[str] = []
+        while not q.empty():
+            section: PageSection = q.get()
+            all_proper_nouns.extend(section.proper_nouns_in_section)
+
+            for child_section in section.child_sections:
+                q.put(child_section)
+
+        if len(all_proper_nouns) == 0:
+            return root_page_section
+
+        # Denorm: Populate all proper nouns in each section.
+        for child_section in root_page_section.child_sections:
+            q.put(child_section)
+
+        while not q.empty():
+            section: PageSection = q.get()
+            section.proper_nouns_in_doc = all_proper_nouns
+
+            for child_section in section.child_sections:
+                q.put(child_section)
+
+        return root_page_section
 
 
 if __name__ == "__main__":
