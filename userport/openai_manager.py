@@ -19,16 +19,16 @@ class OpenAIManager:
         )
         self.chat_model = os.environ.get("OPENAI_CHAT_MODEL")
         self.embedding_model = os.environ.get("OPENAI_EMBEDDING_MODEL")
-        self.system_message = "You are a helpful assistant that answers questions in the most truthful manner possible."
+        self.JSON_RESPONSE_FORMAT = {"type": "json_object"}
 
-    def create_response(self, message: str, temperature: float = 1.0) -> str:
+    def create_response(self, message: str, system_message: str, json_response: bool = False, temperature: float = 1.0) -> str:
         """
         Creates response for given input message. 
         """
         messages = [
             {
                 "role": "system",
-                "content": self.system_message
+                "content": system_message
             },
             {
                 "role": "user",
@@ -36,12 +36,22 @@ class OpenAIManager:
             }
         ]
 
-        chat_completion: ChatCompletion = self.client.chat.completions.create(
-            messages=messages,
-            model=self.chat_model,
-            n=1,
-            temperature=temperature,
-        )
+        chat_completion: ChatCompletion
+        if not json_response:
+            chat_completion = self.client.chat.completions.create(
+                messages=messages,
+                model=self.chat_model,
+                n=1,
+                temperature=temperature,
+            )
+        else:
+            chat_completion = self.client.chat.completions.create(
+                messages=messages,
+                model=self.chat_model,
+                response_format=self.JSON_RESPONSE_FORMAT,
+                n=1,
+                temperature=temperature,
+            )
 
         if len(chat_completion.choices) != 1:
             raise ValueError(

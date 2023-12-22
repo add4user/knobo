@@ -18,8 +18,8 @@ class PageSection:
     prev_sections_context: str = ""
     summary: str = ""
     summary_vector_embedding: List[float] = field(default_factory=list)
-    important_entities_in_section: List[str] = field(default_factory=list)
-    important_entities_in_doc: List[str] = field(default_factory=list)
+    proper_nouns_in_section: List[str] = field(default_factory=list)
+    proper_nouns_in_doc: List[str] = field(default_factory=list)
     child_sections: List['PageSection'] = field(default_factory=list)
 
 
@@ -88,12 +88,16 @@ class IndexPage:
             text_so_far)
 
         # Compute embedding of detailed summary.
-        summary_vector_embedding = self.text_analyzer.generate_vector_embedding(
+        summary_vector_embedding: List[float] = self.text_analyzer.generate_vector_embedding(
             detailed_summary)
 
+        # Computer proper nouns in section text.
+        proper_nouns_in_section: List[str] = self.text_analyzer.generate_proper_nouns(
+            section.text)
+
         # Page section for given HTML section.
-        page_section = PageSection(text=section.text, prev_sections_context=self.summary_of_sections_so_far,
-                                   summary=detailed_summary, summary_vector_embedding=summary_vector_embedding)
+        page_section = PageSection(text=section.text, prev_sections_context=self.summary_of_sections_so_far, summary=detailed_summary,
+                                   summary_vector_embedding=summary_vector_embedding, proper_nouns_in_section=proper_nouns_in_section)
 
         for child_section in section.child_sections:
             child_page_section = self.traverse(child_section)
