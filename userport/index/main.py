@@ -87,8 +87,13 @@ class IndexPage:
         self.summary_of_sections_so_far = self.text_analyzer.generate_concise_summary(
             text_so_far)
 
-        page_section = PageSection(
-            text=section.text, prev_sections_context=self.summary_of_sections_so_far, summary=detailed_summary)
+        # Compute embedding of detailed summary.
+        summary_vector_embedding = self.text_analyzer.generate_vector_embedding(
+            detailed_summary)
+
+        # Page section for given HTML section.
+        page_section = PageSection(text=section.text, prev_sections_context=self.summary_of_sections_so_far,
+                                   summary=detailed_summary, summary_vector_embedding=summary_vector_embedding)
 
         for child_section in section.child_sections:
             child_page_section = self.traverse(child_section)

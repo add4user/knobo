@@ -1,5 +1,5 @@
 from userport.openai_manager import OpenAIManager
-from dataclasses import dataclass
+from typing import List
 
 
 class TextAnalyzer:
@@ -49,7 +49,16 @@ class TextAnalyzer:
             print("\n")
         return self._generate_response(concise_summary_prompt)
 
+    def generate_vector_embedding(self, text: str) -> List[float]:
+        """
+        Generate vector embedding for given text.
+        """
+        return self.openai_manager.get_embedding(text)
+
     def _generate_response(self, prompt: str) -> str:
+        """
+        Helper to generate response from OpenAI.
+        """
         response = self.openai_manager.create_response(
             message=prompt)
         if self.debug:
@@ -59,6 +68,9 @@ class TextAnalyzer:
         return response
 
     def create_summary_prompt(self, text: str) -> str:
+        """
+        Helper to create a summary prompt.
+        """
         return ('Text:\n'
                 '"""\n'
                 f'{text}\n'
@@ -67,6 +79,9 @@ class TextAnalyzer:
                 )
 
     def create_concise_summary_prompt(self, text: str):
+        """
+        Helper to create a concise summary prompt.
+        """
         return ('Text:\n'
                 '"""\n'
                 f'{text}\n'
@@ -76,7 +91,7 @@ class TextAnalyzer:
 
     def create_detailed_summary_with_context_prompt(self, text: str, context: str):
         """
-        Creates summary prompt for given text.
+        Helper to createsa detailed summary prompt for given text and context.
         """
         return ('Preceding text:\n'
                 '"""\n'
