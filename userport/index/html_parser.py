@@ -1,6 +1,6 @@
 from html.parser import HTMLParser
 from bs4 import BeautifulSoup
-from userport.html_node import HTMLNode, HTMLSection, convert_to_sections
+from userport.index.html_node import HTMLNode, HTMLSection, convert_to_sections
 from typing import List, Optional
 from urllib.parse import urljoin
 

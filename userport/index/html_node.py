@@ -25,7 +25,7 @@ class HTMLNode:
 
     def to_str(self, indentation: str = "") -> str:
         """
-        Return string representation of the node and its childresn.
+        Return string representation of the node and its children.
         """
         if self.tag_name == None:
             # We want to replace intra string new lines with spaces.
@@ -91,10 +91,14 @@ class HTMLSection:
     Representation of a section on a HTML Page. A section consits of formatted text
     as well as child sections. Do not instantiate this class directly.
     """
+    ROOT_TEXT = 'root'
     # Text in the section. The text includes the section title as well.
     text: str = ""
     # Child sections under this section.
     child_sections: List['HTMLSection'] = field(default_factory=list)
+
+    def is_root_section(self):
+        return self.text == HTMLSection.ROOT_TEXT
 
 
 def convert_to_sections(root_node: HTMLNode, max_depth: int = 1) -> HTMLSection:
@@ -104,12 +108,12 @@ def convert_to_sections(root_node: HTMLNode, max_depth: int = 1) -> HTMLSection:
 
     Max depth represents the maximum depth from given root node that BFS will
     traverse to generate new sections. The default is 1 i.e. only upto
-    the first set of child nodes.
+    the first level of child nodes.
     """
     assert root_node.tag_name.startswith(
         'root'), f"Invalid tag name: {root_node.tag_name}, expected 'root'"
     q = Queue()
-    root_section = HTMLSection(text='root')
+    root_section = HTMLSection(text=HTMLSection.ROOT_TEXT)
     for cnode in root_node.child_nodes:
         q.put((cnode, root_section))
 
@@ -124,6 +128,7 @@ def convert_to_sections(root_node: HTMLNode, max_depth: int = 1) -> HTMLSection:
         text_list: List[str] = []
         for child_node in node.child_nodes:
             if max_depth_exceeded:
+                # Convert child node to string and append to list.
                 text_list.append(child_node.to_str())
                 continue
 
@@ -132,12 +137,13 @@ def convert_to_sections(root_node: HTMLNode, max_depth: int = 1) -> HTMLSection:
                 child_heading_nodes.append(child_node)
                 continue
 
+            # Convert text node to string and append to list.
             text_list.append(child_node.to_str())
 
         html_section = HTMLSection()
         html_section.text = "".join(text_list)
-        if parent_section:
-            parent_section.child_sections.append(html_section)
+        # Append text of child to parent HTML section.
+        parent_section.child_sections.append(html_section)
 
         if not max_depth_exceeded:
             # BFS on child nodes.
