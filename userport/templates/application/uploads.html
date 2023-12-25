@@ -1,2 +1,7 @@
-{% extends 'application/logged-in-base.html' %} {% block main_content %} {%
-endblock %}
+{% extends 'application/logged-in-base.html' %} {% block main_content %}
+<input type="hidden" id="upload_url_csrf_token" value="{{ csrf_token() }}" />
+<div id="upload-url-container">
+  <button id="upload-url-btn">Click Me</button>
+</div>
+
+{% endblock %}
