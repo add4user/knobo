@@ -149,5 +149,6 @@ class PageSectionManager:
 if __name__ == "__main__":
     section_manager = PageSectionManager()
 
-    url = 'https://support.atlassian.com/jira-software-cloud/docs/navigate-to-your-work/'
+    # url = 'https://support.atlassian.com/jira-software-cloud/docs/navigate-to-your-work/'
+    url = 'https://flask.palletsprojects.com/en/3.0.x/extensions/'
     section_manager.fetch(url)

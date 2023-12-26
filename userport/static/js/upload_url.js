@@ -10,7 +10,7 @@ export class UploadURL {
 
   handleUploadButtonBlick(event) {
     let upload_url = {
-      url: "https://support.atlassian.com/jira-software-cloud/docs/navigate-to-your-work/",
+      url: "https://flask.palletsprojects.com/en/3.0.x/extensions",
     };
 
     let host = window.location.host;
