@@ -13,7 +13,7 @@ PyObjectId = Annotated[str, BeforeValidator(str)]
 
 class UploadStatus(str, Enum):
     IN_PROGRESS = 'IN_PROGRESS'
-    SUCCESS = 'SUCCESS'
+    COMPLETE = 'COMPLETE'
     FAILED = 'FAILED'
 
 

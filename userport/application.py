@@ -121,4 +121,4 @@ def background_upload_url(user_id: str, url: str, upload_id: str):
 
     print("Done with writing sections collection")
     update_upload_status(upload_id=upload_id,
-                         upload_status=UploadStatus.SUCCESS)
+                         upload_status=UploadStatus.COMPLETE)

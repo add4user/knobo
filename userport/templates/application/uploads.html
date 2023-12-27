@@ -1,7 +1,18 @@
 {% extends 'application/logged-in-base.html' %} {% block main_content %}
 <input type="hidden" id="upload_url_csrf_token" value="{{ csrf_token() }}" />
-<div id="upload-url-container">
-  <button id="upload-url-btn">Click Me</button>
+<div id="upload-url-box">
+  <p>
+    Enter a webpage URL containing your product documentation. We will
+    automatically download and index the information from that page. You can
+    upload multiple URLs and also delete them if they are no longer needed.
+  </p>
+  <div id="upload-url-input-box">
+    <input type="text" id="upload-url-input" />
+    <button id="upload-url-btn">Add URL</button>
+  </div>
+  <div id="uploads-list" class="hidden">
+    <h4>Uploaded URLs</h4>
+    <ol></ol>
+  </div>
 </div>
-
 {% endblock %}
