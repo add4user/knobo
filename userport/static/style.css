@@ -274,7 +274,7 @@ body {
 /* Upload URLs */
 
 #upload-url-box {
-  width: 70%;
+  width: 80%;
   margin: auto;
   margin-top: 2%;
   padding: 10px 30px;
@@ -305,17 +305,17 @@ body {
   border: 0.5px solid rgb(45, 43, 43);
 }
 
-#upload-url-input-box button {
+#upload-url-btn {
   width: 10%;
   background-color: #3969bb;
   color: white;
   border-radius: 5px;
-  border: none;
+  border-style: none;
   font-size: medium;
-  cursor: pointer;
 }
 
-#upload-url-input-box button:hover {
+#upload-url-btn:hover {
+  cursor: pointer;
   background-color: white;
   color: #3969bb;
   border: 1px solid #3969bb;
@@ -334,27 +334,10 @@ body {
 }
 
 #uploads-list li {
+  margin-top: 2%;
   display: flex;
   gap: 2%;
   background-color: rgb(245, 243, 243);
-}
-
-#uploads-list li button {
-  width: 10%;
-  height: 50px;
-  margin-top: 0.5%;
-  border-radius: 5px;
-  color: rgb(211, 44, 44);
-  background-color: white;
-  border: 1px solid rgb(211, 44, 44);
-  font-size: 0.8em;
-  margin-left: 1%;
-}
-
-#uploads-list li button:hover {
-  cursor: pointer;
-  background-color: rgb(211, 44, 44);
-  color: white;
 }
 
 .upload-snum {
@@ -371,6 +354,24 @@ body {
   word-wrap: break-word;
 }
 
+#uploads-list li button {
+  width: 10%;
+  height: 50px;
+  margin-top: 0.5%;
+  border-radius: 5px;
+  color: rgb(211, 44, 44);
+  background-color: white;
+  border: 1px solid rgb(211, 44, 44);
+  font-size: 0.8em;
+  margin-left: 1%;
+}
+
 .upload-status {
   color: rgb(246, 154, 24);
+}
+
+#uploads-list li button:hover {
+  cursor: pointer;
+  background-color: rgb(211, 44, 44);
+  color: white;
 }

@@ -65,12 +65,17 @@ def _get_api_keys() -> Collection:
     return _get_db()['api_keys']
 
 
-def _get_upload_by_id(upload_id: str) -> Optional[UploadModel]:
+def get_upload_by_id(upload_id: str) -> UploadModel:
     """
-    Fetch Upload for given upload_id. Returns None if no such user exists.
+    Fetch Upload for given upload id. Throws exception if upload model does not exist.
     """
     uploads = _get_uploads()
-    return _model_from_dict(UploadModel, uploads.find_one({"_id": ObjectId(upload_id)}))
+    upload_model = _model_from_dict(
+        UploadModel, uploads.find_one({"_id": ObjectId(upload_id)}))
+    if not upload_model:
+        raise ValueError(
+            f"Did not find model with {upload_id}")
+    return upload_model
 
 
 def get_user_by_id(user_id: str) -> Optional[UserModel]:
@@ -176,17 +181,6 @@ def update_upload_status(upload_id: str, upload_status: UploadStatus, error_mess
     if not uploads.find_one_and_update({'_id': ObjectId(upload_id)}, {'$set': {'status': upload_status, 'error_message': error_message}}):
         raise ValueError(
             f"No model found to update status with id: {upload_id}")
-
-
-def get_upload_status(upload_id: str) -> UploadStatus:
-    """
-    Fetch upload status for given ID. Throws exception if upload not found.
-    """
-    upload: Optional[UploadModel] = _get_upload_by_id(upload_id)
-    if not upload:
-        raise ValueError(
-            f"Did not find model with {upload_id} while fetching status")
-    return upload.status
 
 
 def insert_page_sections_transactionally(user_id: str, url: str, upload_id: str, root_page_section: PageSection):

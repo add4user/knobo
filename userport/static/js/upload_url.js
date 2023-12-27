@@ -1,3 +1,5 @@
+import { UploadURLService } from "./upload_url_service.js";
+
 export class UploadURL {
   constructor() {
     this.uploadButton = document.querySelector("#upload-url-btn");
@@ -7,56 +9,47 @@ export class UploadURL {
     );
     this.uploadInput = document.querySelector("#upload-url-input");
     this.uploadsList = document.querySelector("#uploads-list");
-    this.csrfToken = document.querySelector("#upload_url_csrf_token").value;
 
-    // Remove when not debugging.
-    this.debug = true;
-
-    if (this.debug) {
-      this.addUploadToList(
-        "https://flask.palletsprojects.com/en/3.0.x/extensions/"
-      );
-      this.uploadsList.classList.remove("hidden");
-    }
+    let csrfToken = document.querySelector("#upload_url_csrf_token").value;
+    this.uploadURLService = new UploadURLService(csrfToken);
   }
 
+  /**
+   * Handles upload button click by calling server to upload URL.
+   * @param {Event} event
+   */
   handleUploadButtonBlick(event) {
     if (this.uploadInput.value === "") {
       alert("URL cannot be empty");
       return;
     }
-    let page_url = this.uploadInput.value;
-    let upload_url = {
-      url: page_url,
-    };
 
-    this.addUploadToList(page_url);
+    let page_url = this.uploadInput.value;
+    this.uploadURLService
+      .upload_url(page_url)
+      .then(this.handleUploadResponse.bind(this));
+  }
+
+  /**
+   * Handle result from Upload call to the server.
+   */
+  handleUploadResponse(upload) {
+    // Update data service with upload result.
+    this.uploadURLService.addToUploads(upload);
+
+    // Update UI with latest upload result.
+    this.addUploadToListView(upload);
     if (this.uploadsList.classList.contains("hidden")) {
       this.uploadsList.classList.remove("hidden");
     }
     this.uploadInput.value = "";
-
-    if (this.debug) {
-      // Don't call server when debugging.
-      return;
-    }
-
-    let host = window.location.host;
-    let url = "http://" + host + "/api/v1/upload_url";
-    fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-CSRFToken": this.csrfToken,
-      },
-      body: JSON.stringify(upload_url),
-    });
   }
 
-  addUploadToList(url) {
-    /**
-     * Add given URL to list of uploaded URLs.
-     */
+  /**
+   * Add upload object to upload object views.
+   * @param {Object} upload
+   */
+  addUploadToListView(upload) {
     let ol = this.uploadsList.querySelector("ol");
 
     let li = document.createElement("li");
@@ -68,6 +61,7 @@ export class UploadURL {
     li.appendChild(snum);
 
     // Create link
+    let url = upload.url;
     let adiv = document.createElement("div");
     adiv.classList.add("uploaded-link-container");
     let a = document.createElement("a");
@@ -80,7 +74,7 @@ export class UploadURL {
 
     // Create upload status.
     let p = document.createElement("p");
-    p.innerText = "Upload In Progress";
+    p.innerText = this.uploadURLService.get_status(upload);
     p.classList.add("upload-status");
     li.appendChild(p);
 

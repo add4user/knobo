@@ -1,11 +1,14 @@
 from flask import Blueprint, render_template, request, session, jsonify
 from flask_login import login_required
 from userport.index import PageSection, PageSectionManager
-from userport.models import UploadStatus
-from userport.db import insert_page_sections_transactionally, create_upload, update_upload_status, get_upload_status
+from userport.models import UploadStatus, UploadModel
+from userport.db import insert_page_sections_transactionally, create_upload, update_upload_status, get_upload_by_id
 from celery import shared_task
 
 bp = Blueprint('application', __name__)
+
+# Remove when not debugging.
+debug = True
 
 
 class APIException(Exception):
@@ -56,7 +59,7 @@ def upload_url():
     and returns an upload ID to the client.
 
     GET:
-    Fetch upload status for given upload ID.
+    Fetch uploaded URL using given upload ID.
     """
     if request.method == 'POST':
         user_id = get_user_id()
@@ -74,13 +77,25 @@ def upload_url():
             raise APIException(
                 status_code=500, message=f"Internal error! Failed to upload URL: {url}")
 
+        upload_model: UploadModel
+        try:
+            upload_model = get_upload_by_id(upload_id)
+        except Exception as e:
+            print(e)
+            raise APIException(
+                status_code=500, message=f"Internal error! Failed to fetch model with Id: {upload_id}")
+
+        if debug:
+            # Return early without starting background task.
+            return upload_model.model_dump(exclude=['creator_id', 'org_domain']), 200
+
         try:
             background_upload_url.delay(user_id, url, upload_id)
         except Exception as e:
             print(e)
             raise APIException(status_code=500,
                                message=f"Internal error! Failed to initiate upload for URL: {url}")
-        return {"upload_id": upload_id}, 200
+        return upload_model.model_dump(exclude=['creator_id', 'org_domain']), 200
     else:
         # Fetch upload status.
         upload_id = request.args.get('id', '')
@@ -88,15 +103,15 @@ def upload_url():
             raise APIException(
                 status_code=400, message='Missing ID in upload request')
 
-        upload_status: UploadStatus
+        upload_model: UploadModel
         try:
-            upload_status = get_upload_status(upload_id)
+            upload_model = get_upload_by_id(upload_id)
         except Exception as e:
             print(e)
             raise APIException(
                 status_code=500, message=f'Internal error! Failed to get upload status for id: {upload_id}')
 
-        return {'id': upload_id, 'upload_status': upload_status}, 200
+        return upload_model.model_dump(exclude=['creator_id', 'org_domain']), 200
 
 
 @shared_task()
