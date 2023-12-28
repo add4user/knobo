@@ -1,62 +1,88 @@
 import { UploadURLService } from "./upload_url_service.js";
 
 export class UploadURL {
+  /**
+   * View to allow user to upload and manage uploaded URLs.
+   */
   constructor() {
     this.uploadButton = document.querySelector("#upload-url-btn");
     this.uploadButton.addEventListener(
       "click",
-      this.handleUploadButtonBlick.bind(this)
+      this.handleUploadButtonClick.bind(this)
     );
     this.uploadInput = document.querySelector("#upload-url-input");
     this.uploadsList = document.querySelector("#uploads-list");
 
     let csrfToken = document.querySelector("#upload_url_csrf_token").value;
+    this.loader = document.querySelector(".loader");
+
     this.uploadURLService = new UploadURLService(csrfToken);
+
+    this.uploadURLService.addEventListener(
+      "render_uploads",
+      this.renderUploads.bind(this)
+    );
+
+    this.uploadURLService.addEventListener("fetch_start", () =>
+      this.showLoader()
+    );
+
+    this.uploadURLService.addEventListener("fetch_complete", () =>
+      this.hideLoader()
+    );
+
+    // Fetch already uploaded URLs.
+    this.uploadURLService.list_urls();
+  }
+
+  /**
+   * render all uploaded URLs.
+   */
+  renderUploads() {
+    let uploads = this.uploadURLService.getUploads();
+    if (uploads.length === 0) {
+      // Nothing to do.
+      return;
+    }
+
+    // Replace all children of existing list with current uploads.
+    let ol = this.uploadsList.querySelector("ol");
+    var uploadHTMLArr = [];
+    for (let i = 0; i < uploads.length; i++) {
+      let upload = uploads[i];
+      let li = this.createUploadHTML(i, upload);
+      uploadHTMLArr.push(li);
+    }
+    ol.replaceChildren(...uploadHTMLArr);
+
+    this.unhideUploadsList();
+    this.clearUploadInput();
   }
 
   /**
    * Handles upload button click by calling server to upload URL.
    * @param {Event} event
    */
-  handleUploadButtonBlick(event) {
+  handleUploadButtonClick(event) {
     if (this.uploadInput.value === "") {
       alert("URL cannot be empty");
       return;
     }
-
     let page_url = this.uploadInput.value;
-    this.uploadURLService
-      .upload_url(page_url)
-      .then(this.handleUploadResponse.bind(this));
+    this.uploadURLService.upload_url(page_url);
   }
 
   /**
-   * Handle result from Upload call to the server.
-   */
-  handleUploadResponse(upload) {
-    // Update data service with upload result.
-    this.uploadURLService.addToUploads(upload);
-
-    // Update UI with latest upload result.
-    this.addUploadToListView(upload);
-    if (this.uploadsList.classList.contains("hidden")) {
-      this.uploadsList.classList.remove("hidden");
-    }
-    this.uploadInput.value = "";
-  }
-
-  /**
-   * Add upload object to upload object views.
+   * Returns HTML for upload (as a list item) using index and upload object as inputs.
+   * @param {Object} index
    * @param {Object} upload
    */
-  addUploadToListView(upload) {
-    let ol = this.uploadsList.querySelector("ol");
-
+  createUploadHTML(index, upload) {
     let li = document.createElement("li");
 
     // Create serial number.
     let snum = document.createElement("p");
-    snum.innerText = (ol.childElementCount + 1).toString() + ".";
+    snum.innerText = (index + 1).toString() + ".";
     snum.classList.add("upload-snum");
     li.appendChild(snum);
 
@@ -81,8 +107,39 @@ export class UploadURL {
     // Add delete Button.
     let b = document.createElement("button");
     b.innerText = "Delete";
+    b.addEventListener("click", () => this.uploadURLService.delete_url(upload));
     li.appendChild(b);
 
-    ol.appendChild(li);
+    return li;
+  }
+
+  /**
+   * Uploads list is initally hidden, this method unhides it.
+   */
+  unhideUploadsList() {
+    if (this.uploadsList.classList.contains("hidden")) {
+      this.uploadsList.classList.remove("hidden");
+    }
+  }
+
+  /**
+   * Clears upload URL value.
+   */
+  clearUploadInput() {
+    this.uploadInput.value = "";
+  }
+
+  /**
+   * Show spinning loader.
+   */
+  showLoader() {
+    this.loader.classList.remove("hidden");
+  }
+
+  /**
+   * Hide spinning loader.
+   */
+  hideLoader() {
+    this.loader.classList.add("hidden");
   }
 }

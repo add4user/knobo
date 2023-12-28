@@ -10,6 +10,10 @@ from userport.index.page_section_manager import PageSection
 from queue import Queue
 
 
+class NotFoundException(Exception):
+    pass
+
+
 def _get_mongo_client() -> MongoClient:
     if 'mongo_client' not in g:
         # Create a new client and connect to the server
@@ -78,12 +82,16 @@ def get_upload_by_id(upload_id: str) -> UploadModel:
     return upload_model
 
 
-def get_user_by_id(user_id: str) -> Optional[UserModel]:
+def get_user_by_id(user_id: str) -> UserModel:
     """
-    Fetch user for given ID. Returns None if no such user exists.
+    Fetch user for given ID. Throws Exception no such user exists.
     """
     users = _get_users()
-    return _model_from_dict(UserModel, users.find_one({"_id": ObjectId(user_id)}))
+    user = _model_from_dict(
+        UserModel, users.find_one({"_id": ObjectId(user_id)}))
+    if user == None:
+        raise NotFoundException(f'User with id {user_id} does not exist')
+    return user
 
 
 def get_user_by_email(email: str) -> Optional[UserModel]:
@@ -160,9 +168,7 @@ def create_upload(user_id: str, url: str) -> str:
     """
     Creates an upload object and return associated ID.
     """
-    user: Optional[UserModel] = get_user_by_id(user_id)
-    if user == None:
-        raise ValueError(f'User with id {user_id} does not exist for upload')
+    user: UserModel = get_user_by_id(user_id)
 
     upload_model = UploadModel(creator_id=user_id, created=_get_current_time(
     ), org_domain=user.org_domain, url=url, status=UploadStatus.IN_PROGRESS)
@@ -183,6 +189,28 @@ def update_upload_status(upload_id: str, upload_status: UploadStatus, error_mess
             f"No model found to update status with id: {upload_id}")
 
 
+def list_uploads_by_org_domain(org_domain: str) -> List[UploadModel]:
+    """
+    List all uploads for a given org domain. Not paginating for now.
+    """
+    upload_model_list: List[UploadModel] = []
+    uploads = _get_uploads()
+    for upload_model_dict in uploads.find({"org_domain": org_domain}):
+        upload_model_list.append(UploadModel(**upload_model_dict))
+    return upload_model_list
+
+
+def delete_upload_with_id(upload_id: str):
+    """
+    Delete upload with given ID. Throws error if deleted count is not 1.
+    """
+    uploads = _get_uploads()
+    result = uploads.delete_one({'_id': ObjectId(upload_id)})
+    if result.deleted_count != 1:
+        raise NotFoundException(
+            f"Expected 1 doc to be deleted, got {result.deleted_count} deleted")
+
+
 def insert_page_sections_transactionally(user_id: str, url: str, upload_id: str, root_page_section: PageSection):
     """
     Insert page sections in the tree of given root page section into Sections Collect in a 
@@ -190,9 +218,7 @@ def insert_page_sections_transactionally(user_id: str, url: str, upload_id: str,
     in each document forms the linkage between them.
     """
     assert root_page_section.is_root, f"Expected root section, got {root_page_section}"
-    user: Optional[UserModel] = get_user_by_id(user_id)
-    if user == None:
-        raise ValueError(f'User with id {user_id} does not exist')
+    user: UserModel = get_user_by_id(user_id)
 
     current_time: datetime = _get_current_time()
     sections = _get_sections()

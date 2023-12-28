@@ -1,8 +1,18 @@
 from flask import Blueprint, render_template, request, session, jsonify
 from flask_login import login_required
 from userport.index import PageSection, PageSectionManager
-from userport.models import UploadStatus, UploadModel
-from userport.db import insert_page_sections_transactionally, create_upload, update_upload_status, get_upload_by_id
+from userport.models import UploadStatus, UploadModel, UserModel
+from typing import List, Dict
+from userport.db import (
+    insert_page_sections_transactionally,
+    create_upload,
+    update_upload_status,
+    get_upload_by_id,
+    get_user_by_id,
+    list_uploads_by_org_domain,
+    delete_upload_with_id,
+    NotFoundException
+)
 from celery import shared_task
 
 bp = Blueprint('application', __name__)
@@ -45,9 +55,42 @@ def get_user_id():
 @login_required
 def uploads_view():
     """
-    View to show upload URL options.
+    View to show upload URLs by the user (if any).
     """
     return render_template('application/uploads.html')
+
+
+@bp.route('/api/v1/list_urls', methods=['GET'])
+@login_required
+def list_urls():
+    """
+    Fetch list of URLs uploaded for the user's organization domain.
+    """
+    user_id = get_user_id()
+
+    user: UserModel
+    try:
+        user = get_user_by_id(user_id)
+    except NotFoundException as e:
+        print(e)
+        raise APIException(
+            status_code=400, message=f"User with id {user_id} not found")
+    except Exception as e:
+        print(e)
+        raise APIException(
+            status_code=500, message=f"Internal error! Failed to user with id {user_id}")
+
+    upload_model_list: List[UploadModel] = []
+    org_domain = user.org_domain
+    try:
+        upload_model_list = list_uploads_by_org_domain(org_domain=org_domain)
+    except Exception as e:
+        print(e)
+        raise APIException(
+            status_code=500, message=f"Internal Error! failed to list uploads for domain {org_domain}")
+
+    return {"uploads": [upload_model.model_dump()
+                        for upload_model in upload_model_list]}, 200
 
 
 @bp.route('/api/v1/upload_url', methods=['GET', 'POST'])
@@ -87,7 +130,7 @@ def upload_url():
 
         if debug:
             # Return early without starting background task.
-            return upload_model.model_dump(exclude=['creator_id', 'org_domain']), 200
+            return upload_model.model_dump(), 200
 
         try:
             background_upload_url.delay(user_id, url, upload_id)
@@ -95,7 +138,7 @@ def upload_url():
             print(e)
             raise APIException(status_code=500,
                                message=f"Internal error! Failed to initiate upload for URL: {url}")
-        return upload_model.model_dump(exclude=['creator_id', 'org_domain']), 200
+        return upload_model.model_dump(), 200
     else:
         # Fetch upload status.
         upload_id = request.args.get('id', '')
@@ -111,7 +154,7 @@ def upload_url():
             raise APIException(
                 status_code=500, message=f'Internal error! Failed to get upload status for id: {upload_id}')
 
-        return upload_model.model_dump(exclude=['creator_id', 'org_domain']), 200
+        return upload_model.model_dump(), 200
 
 
 @shared_task()
@@ -137,3 +180,28 @@ def background_upload_url(user_id: str, url: str, upload_id: str):
     print("Done with writing sections collection")
     update_upload_status(upload_id=upload_id,
                          upload_status=UploadStatus.COMPLETE)
+
+
+@bp.route('/api/v1/delete_url', methods=['GET'])
+@login_required
+def delete_url():
+    """
+    Delete URL with given upload ID.
+    """
+    upload_id = request.args.get('id', '')
+    if upload_id == '':
+        raise APIException(
+            status_code=400, message='Missing ID in upload request')
+
+    try:
+        delete_upload_with_id(upload_id)
+    except NotFoundException as e:
+        print(e)
+        raise APIException(
+            status_code=400, message=f"Did not find upload with ID: {upload_id}")
+    except Exception as e:
+        print(e)
+        raise APIException(
+            status_code=500, message=f"Internal error! Could not delete upload with ID: {upload_id}")
+
+    return {}, 200
