@@ -51,7 +51,12 @@ export class UploadURLService extends EventTarget {
       },
       body: JSON.stringify(upload_url),
     })
-      .then((response) => response.json())
+      .then((response) =>
+        response.json().catch((error) => {
+          // Server returned a non JSON response.
+          throw new Error(`${response.status}: Server error`);
+        })
+      )
       .then((upload) => {
         this.dispatch_fetch_end_event();
         this.checkErrorCode(upload);
@@ -107,7 +112,12 @@ export class UploadURLService extends EventTarget {
 
       this.dispatch_fetch_start_event();
       fetch(endpoint_url)
-        .then((response) => response.json())
+        .then((response) =>
+          response.json().catch((error) => {
+            // Server returned a non JSON response.
+            throw new Error(`${response.status}: Server error`);
+          })
+        )
         .then((data) => {
           this.dispatch_fetch_end_event();
           this.checkErrorCode(data);
@@ -130,7 +140,12 @@ export class UploadURLService extends EventTarget {
 
     this.dispatch_fetch_start_event();
     fetch(endpoint_url)
-      .then((response) => response.json())
+      .then((response) =>
+        response.json().catch((error) => {
+          // Server returned a non JSON response.
+          throw new Error(`${response.status}: Server error`);
+        })
+      )
       .then((data) => {
         this.dispatch_fetch_end_event();
         this.checkErrorCode(data);
@@ -155,7 +170,12 @@ export class UploadURLService extends EventTarget {
 
     this.dispatch_fetch_start_event();
     fetch(endpoint_url)
-      .then((response) => response.json())
+      .then((response) =>
+        response.json().catch((error) => {
+          // Server returned a non JSON response.
+          throw new Error(`${response.status}: Server error`);
+        })
+      )
       .then((data) => {
         this.dispatch_fetch_end_event();
         this.checkErrorCode(data);
@@ -195,17 +215,15 @@ export class UploadURLService extends EventTarget {
   }
 
   /**
-   * check if error code is in data and throws appropriate error if so.
-   * @param {object} data
+   * check if error code is in response data and throws appropriate error if so.
+   * @param {object} data Response object
    */
   checkErrorCode(data) {
     if (!("error_code" in data)) {
       return;
     }
     if ("message" in data) {
-      throw new Error(data.message);
-    } else {
-      throw new Error("Got an error from the server");
+      throw new Error(`${data.error_code}: ${data.message}`);
     }
   }
 }
