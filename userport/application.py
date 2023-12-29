@@ -32,7 +32,7 @@ class APIException(Exception):
         self.message = message
 
     def to_dict(self):
-        return {'status_code': self.status_code, 'message': self.message}
+        return {'error_code': self.status_code, 'message': self.message}
 
     def get_status_code(self):
         return self.status_code

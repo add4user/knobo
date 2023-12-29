@@ -40,10 +40,6 @@ export class UploadURL {
    */
   renderUploads() {
     let uploads = this.uploadURLService.getUploads();
-    if (uploads.length === 0) {
-      // Nothing to do.
-      return;
-    }
 
     // Replace all children of existing list with current uploads.
     let ol = this.uploadsList.querySelector("ol");
@@ -55,7 +51,11 @@ export class UploadURL {
     }
     ol.replaceChildren(...uploadHTMLArr);
 
-    this.unhideUploadsList();
+    if (uploads.length > 0) {
+      this.unhideUploadsList();
+    } else {
+      this.hideUploadsList();
+    }
     this.clearUploadInput();
   }
 
@@ -114,11 +114,20 @@ export class UploadURL {
   }
 
   /**
-   * Uploads list is initally hidden, this method unhides it.
+   * UnHides uploads list if hidden currently.
    */
   unhideUploadsList() {
     if (this.uploadsList.classList.contains("hidden")) {
       this.uploadsList.classList.remove("hidden");
+    }
+  }
+
+  /**
+   * Hides Upload list if unhidden currently.
+   */
+  hideUploadsList() {
+    if (!this.uploadsList.classList.contains("hidden")) {
+      this.uploadsList.classList.add("hidden");
     }
   }
 

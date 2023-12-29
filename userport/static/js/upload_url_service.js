@@ -53,8 +53,10 @@ export class UploadURLService extends EventTarget {
     })
       .then((response) => response.json())
       .then((upload) => {
-        this.uploads.push(upload);
         this.dispatch_fetch_end_event();
+        this.checkErrorCode(upload);
+
+        this.uploads.push(upload);
         this.dispatch_render_uploads_event();
       })
       .catch((error) => {
@@ -108,6 +110,8 @@ export class UploadURLService extends EventTarget {
         .then((response) => response.json())
         .then((data) => {
           this.dispatch_fetch_end_event();
+          this.checkErrorCode(data);
+
           console.log("data status: " + data.status);
         })
         .catch((error) => {
@@ -129,6 +133,8 @@ export class UploadURLService extends EventTarget {
       .then((response) => response.json())
       .then((data) => {
         this.dispatch_fetch_end_event();
+        this.checkErrorCode(data);
+
         if (!("uploads" in data)) {
           throw new Error("Invalid Uploads response format");
         }
@@ -151,12 +157,14 @@ export class UploadURLService extends EventTarget {
     fetch(endpoint_url)
       .then((response) => response.json())
       .then((data) => {
+        this.dispatch_fetch_end_event();
+        this.checkErrorCode(data);
+
         // Remove element from uploads list since it is deleted now.
         const index = this.uploads.indexOf(upload);
         if (index > -1) {
           this.uploads.splice(index, 1);
         }
-        this.dispatch_fetch_end_event();
         this.dispatch_render_uploads_event();
       })
       .catch((error) => {
@@ -184,5 +192,20 @@ export class UploadURLService extends EventTarget {
    */
   dispatch_fetch_end_event() {
     this.dispatchEvent(new Event("fetch_complete"));
+  }
+
+  /**
+   * check if error code is in data and throws appropriate error if so.
+   * @param {object} data
+   */
+  checkErrorCode(data) {
+    if (!("error_code" in data)) {
+      return;
+    }
+    if ("message" in data) {
+      throw new Error(data.message);
+    } else {
+      throw new Error("Got an error from the server");
+    }
   }
 }
