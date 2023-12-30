@@ -63,6 +63,9 @@ export class UploadURLService extends EventTarget {
 
         this.uploads.push(upload);
         this.dispatch_render_uploads_event();
+
+        // Start checking status for this upload.
+        this.check_status(upload.id);
       })
       .catch((error) => {
         this.dispatch_fetch_end_event();
@@ -94,41 +97,66 @@ export class UploadURLService extends EventTarget {
   }
 
   /**
-   * Checks status of each in progress upload.
+   * Returns true if upload is in progress.
+   * @param {object} upload
+   * @returns boolean
    */
-  check_statuses() {
-    for (let i = 0; i < this.uploads.length; i++) {
-      let upload = this.uploads[i];
-      if (upload.status != "IN_PROGRESS") {
-        continue;
-      }
+  is_upload_in_progress(upload) {
+    return upload.status === "IN_PROGRESS";
+  }
 
-      let endpoint_url =
-        this.http_prefix +
-        window.location.host +
-        this.UPLOAD_ENDPOINT +
-        "?id=" +
-        upload.id;
+  /**
+   * Returns true if upload is complete else false.
+   * @param {object} upload
+   * @returns boolean
+   */
+  is_upload_complete(upload) {
+    return upload.status === "COMPLETE";
+  }
 
-      this.dispatch_fetch_start_event();
-      fetch(endpoint_url)
-        .then((response) =>
-          response.json().catch((error) => {
-            // Server returned a non JSON response.
-            throw new Error(`${response.status}: Server error`);
-          })
-        )
-        .then((data) => {
-          this.dispatch_fetch_end_event();
-          this.checkErrorCode(data);
+  /**
+   * Returns true if upload has failed else false.
+   * @param {object} upload
+   * @returns boolean
+   */
+  has_upload_failed(upload) {
+    return upload.status === "FAILED";
+  }
 
-          console.log("data status: " + data.status);
+  /**
+   * Check status of the upload periodically.
+   * @param {string} upload_id
+   */
+  check_status(upload_id) {
+    let endpoint_url = `${this.http_prefix}${window.location.host}${this.UPLOAD_ENDPOINT}?id=${upload_id}`;
+
+    fetch(endpoint_url)
+      .then((response) =>
+        response.json().catch((error) => {
+          // Server returned a non JSON response.
+          throw new Error(`${response.status}: Server error`);
         })
-        .catch((error) => {
-          this.dispatch_fetch_end_event();
-          throw error;
-        });
-    }
+      )
+      .then((upload) => {
+        this.checkErrorCode(upload);
+        if (upload.status != "IN_PROGRESS") {
+          // Polling complete.
+          let index = this.uploads.findIndex(
+            (existingUpload) => existingUpload.id === upload.id
+          );
+          if (index == -1) {
+            alert(`Uploaded URL ${upload.id} not found in existing uploads`);
+          }
+          this.uploads[index] = upload;
+          this.dispatch_render_uploads_event();
+        } else {
+          // Continue polling after fixed interval of 20s.
+          setTimeout(this.check_status.bind(this), 20000, upload_id);
+        }
+      })
+      .catch((error) => {
+        throw error;
+      });
   }
 
   /**
@@ -154,6 +182,10 @@ export class UploadURLService extends EventTarget {
           throw new Error("Invalid Uploads response format");
         }
         this.uploads = data.uploads;
+        for (let i = 0; i < this.uploads.length; i++) {
+          // Start checking status for this upload.
+          this.check_status(this.uploads[i].id);
+        }
         this.dispatch_render_uploads_event();
       })
       .catch((error) => {

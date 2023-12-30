@@ -376,7 +376,7 @@ body {
 
 #uploads-list li button {
   width: 10%;
-  height: 50px;
+  height: 40px;
   margin-top: 0.5%;
   border-radius: 5px;
   color: rgb(211, 44, 44);
@@ -394,4 +394,12 @@ body {
   cursor: pointer;
   background-color: rgb(211, 44, 44);
   color: white;
+}
+
+#uploads-list li button:disabled {
+  cursor: auto;
+  /* border: 1px solid gray; */
+  border: none;
+  background-color: #cccccc;
+  color: gray;
 }

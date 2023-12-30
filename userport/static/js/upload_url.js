@@ -101,12 +101,23 @@ export class UploadURL {
     // Create upload status.
     let p = document.createElement("p");
     p.innerText = this.uploadURLService.get_status(upload);
+    if (this.uploadURLService.is_upload_complete(upload)) {
+      p.style.color = "green";
+    } else if (this.uploadURLService.has_upload_failed(upload)) {
+      p.style.color = "#d32c2c";
+    }
     p.classList.add("upload-status");
     li.appendChild(p);
 
     // Add delete Button.
     let b = document.createElement("button");
     b.innerText = "Delete";
+    if (this.uploadURLService.is_upload_in_progress(upload)) {
+      console.log("Disable delete");
+      b.disabled = true;
+    } else {
+      b.disabled = false;
+    }
     b.addEventListener("click", () => this.uploadURLService.delete_url(upload));
     li.appendChild(b);
 

@@ -154,7 +154,12 @@ def upload_url():
             raise APIException(
                 status_code=500, message=f'Internal error! Failed to get upload status for id: {upload_id}')
 
-        return upload_model.model_dump(), 200
+        got_model_dict = upload_model.model_dump()
+        if debug:
+            update_upload_status(upload_id=upload_id,
+                                 upload_status=UploadStatus.COMPLETE)
+
+        return got_model_dict, 200
 
 
 @shared_task()
