@@ -1,0 +1,4 @@
+{% extends 'application/logged_in_base.html' %} {% block main_content %}
+<input type="hidden" id="upload_url_csrf_token" value="{{ csrf_token() }}" />
+<div id="api-keys-box"></div>
+{% endblock %}

@@ -1,4 +1,4 @@
-import { UserAccount } from "./user_account.js";
+import { LoggedInBaseView } from "./logged_in_base.js";
 import { UploadURL } from "./upload_url.js";
 
 function main() {
@@ -12,8 +12,16 @@ function main() {
     alert(event.reason); // Error: Whoops! - the unhandled error object
   });
 
-  new UserAccount();
-  new UploadURL();
+  let route = window.location.pathname;
+  switch (route) {
+    case "/":
+      new LoggedInBaseView();
+      new UploadURL();
+      break;
+    case "/api-key":
+      new LoggedInBaseView();
+      break;
+  }
 }
 
 main();

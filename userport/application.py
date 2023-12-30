@@ -51,6 +51,11 @@ def get_user_id():
     return session["_user_id"]
 
 
+"""
+Upload URL views and APIs.
+"""
+
+
 @bp.route('/', methods=['GET'])
 @login_required
 def uploads_view():
@@ -210,3 +215,17 @@ def delete_url():
             status_code=500, message=f"Internal error! Could not delete upload with ID: {upload_id}")
 
     return {}, 200
+
+
+"""
+API key views and APIs.
+"""
+
+
+@bp.route('/api-key', methods=['GET'])
+@login_required
+def api_key_view():
+    """
+    View to allow creation and display of API key.
+    """
+    return render_template('application/api_key.html')

@@ -276,7 +276,7 @@ body {
   line-height: 20px;
 }
 
-#left-nav li.active {
+#left-nav a.active {
   text-decoration: underline;
   text-underline-offset: 10px;
 }
@@ -403,3 +403,5 @@ body {
   background-color: #cccccc;
   color: gray;
 }
+
+/* Manage API Keys */
