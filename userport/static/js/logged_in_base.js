@@ -1,4 +1,7 @@
 export class LoggedInBaseView {
+  /**
+   * Contains logic associated with the common logged in view of the user.
+   */
   constructor() {
     this.userAccountContainer = document.querySelector("#user-account");
     this.userAccountContainer.addEventListener(
