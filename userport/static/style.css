@@ -251,7 +251,7 @@ body {
 }
 
 #left-nav {
-  width: 20%;
+  width: 15%;
   background-color: rgb(241, 239, 239);
   border: 1px solid #d9d4d4;
 
@@ -291,7 +291,7 @@ body {
 }
 
 #main-content {
-  width: 80%;
+  width: 85%;
   height: 100%;
 }
 
@@ -409,3 +409,62 @@ body {
 }
 
 /* Manage API Keys */
+
+#api-key-box {
+  width: 80%;
+  margin: auto;
+  margin-top: 2%;
+  padding: 10px 30px;
+}
+
+#api-key-box > p {
+  line-height: 30px;
+  word-spacing: 2px;
+  color: rgb(51, 50, 50);
+}
+
+#api-key-details {
+  margin-top: 3%;
+}
+
+.create-api-key-btn {
+  width: 20%;
+  font-size: medium;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid rgb(64, 64, 192);
+  color: rgb(64, 64, 192);
+  background-color: white;
+}
+
+.create-api-key-btn:hover {
+  cursor: pointer;
+  color: white;
+  background-color: rgb(64, 64, 192);
+}
+
+#api-key-details > h4 {
+  line-height: 30px;
+  word-spacing: 2px;
+  color: rgb(51, 50, 50);
+  padding: 5px 5px;
+}
+
+#api-key-details > h4 span {
+  color: rgb(52, 48, 125);
+}
+
+.delete-api-key-btn {
+  font-size: medium;
+  padding: 10px 10px;
+  border-radius: 5px;
+  border: 1px solid rgb(211, 44, 44);
+  color: rgb(211, 44, 44);
+  background-color: white;
+}
+
+.delete-api-key-btn:hover {
+  cursor: pointer;
+  color: white;
+  background-color: rgb(211, 44, 44);
+}

@@ -2,6 +2,8 @@
 Helper methods for the application.
 """
 import requests
+import hashlib
+import secrets
 
 
 def get_domain_from_email(email: str):
@@ -25,3 +27,11 @@ def fetch_html_page(url: str) -> str:
         raise ValueError(
             f'Invalid Content Type; expected text/html, got {content_type}')
     return response.text
+
+
+def generate_hash(key: str) -> str:
+    """
+    Helper to hash an existing key. Returns hex string of length 16.
+    """
+    h = hashlib.shake_256(key.encode('utf-8'))
+    return h.hexdigest(16)

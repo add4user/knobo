@@ -1,4 +1,12 @@
 {% extends 'application/logged_in_base.html' %} {% block main_content %}
-<input type="hidden" id="upload_url_csrf_token" value="{{ csrf_token() }}" />
-<div id="api-key-box"></div>
+<input type="hidden" id="api-key-csrf-token" value="{{ csrf_token() }}" />
+<div id="api-key-box">
+  <p>
+    We use API keys to authenticate your app to our service. They created API
+    key will only be shown once upon creation, so please store it somewhere
+    safe. You can also delete the existing key and create a new one if needed.
+  </p>
+  <div class="loader hidden"></div>
+  <div id="api-key-details"></div>
+</div>
 {% endblock %}

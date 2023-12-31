@@ -88,12 +88,15 @@ class APIKeyModel(BaseModel):
     """
     Representation of API key stored in the database as a collection.
     """
-    id: Optional[PyObjectId] = Field(alias="_id", default=None)
-    name: str = Field(...)
-    prefix: str = Field(...)
-    value: str = Field(...)
+    # API key value, it is a hashed value.
+    id: Optional[PyObjectId] = Field(serialization_alias="_id")
+    # Key prefix to help user manually match key to any key they may hold.
+    key_prefix: str = Field(...)
+    # Domain of the org which should be globally unique.
     org_domain: str = Field(...)
+    # ID of the creator.
     creator_id: str = Field(...)
+    # Time when API Key was written to database.
     created: Optional[datetime] = None
 
 

@@ -2,7 +2,7 @@ from flask import current_app, g
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
 from pymongo.collection import Collection
-from userport.models import UserModel, OrganizationModel, SectionModel, UploadModel, UploadStatus
+from userport.models import UserModel, OrganizationModel, SectionModel, UploadModel, UploadStatus, APIKeyModel
 from datetime import datetime, timezone
 from bson.objectid import ObjectId
 from typing import Optional, Dict, List, Type
@@ -245,3 +245,35 @@ def insert_page_sections_transactionally(user_id: str, url: str, upload_id: str,
 
                 for child_page_section in page_section.child_sections:
                     q.put((child_page_section, section_id))
+
+
+def insert_api_key(api_key_model: APIKeyModel):
+    """
+    Insert API key in the database.
+    """
+    api_keys = _get_api_keys()
+    api_key_model.created = _get_current_time()
+    api_keys.insert_one(api_key_model.model_dump())
+
+
+def get_api_key_for_domain(org_domain: str) -> APIKeyModel:
+    """
+    Fetch API Key for given organization domain.
+    """
+    api_keys = _get_api_keys()
+    api_key_dict = api_keys.find_one({"org_domain": org_domain})
+    if not api_key_dict:
+        raise NotFoundException(
+            f'API key not found for Org domain {org_domain}')
+    return APIKeyModel(**api_key_dict)
+
+
+def delete_api_key_for_domain(org_domain: str) -> APIKeyModel:
+    """
+    Delete API Key for given organization domain.
+    """
+    api_keys = _get_api_keys()
+    result = api_keys.delete_one({'org_domain': org_domain})
+    if result.deleted_count != 1:
+        raise NotFoundException(
+            f"Expected 1 API key to be deleted, got {result.deleted_count} deleted")

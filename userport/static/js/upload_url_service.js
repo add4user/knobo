@@ -1,3 +1,9 @@
+import {
+  PROTOCOL_PREFIX,
+  JSON_HTTP_HEADER_VALUE,
+  HTTP_POST_METHOD,
+} from "./constants.js";
+
 export class UploadURLService extends EventTarget {
   /**
    * Service that uploads and fetches data related to URLs.
@@ -17,9 +23,6 @@ export class UploadURLService extends EventTarget {
     this.UPLOAD_ENDPOINT = "/api/v1/upload_url";
     this.LIST_URLS_ENDPOINT = "/api/v1/list_urls";
     this.DELETE_URL_ENDPOINT = "/api/v1/delete_url";
-    this.http_prefix = "http://";
-    this.JSON_HTTP_HEADER_VALUE = "application/json";
-    this.HTTP_POST_METHOD = "POST";
   }
 
   /**
@@ -34,19 +37,19 @@ export class UploadURLService extends EventTarget {
    * @param {string} url
    * @returns {Promise} Promise of the completed upload.
    */
-  upload_url(web_page_url, callback) {
+  upload_url(web_page_url) {
     // Request body format.
     let upload_url = {
       url: web_page_url,
     };
     let endpoint_url =
-      this.http_prefix + window.location.host + this.UPLOAD_ENDPOINT;
+      PROTOCOL_PREFIX + window.location.host + this.UPLOAD_ENDPOINT;
 
     this.dispatch_fetch_start_event();
     return fetch(endpoint_url, {
-      method: this.HTTP_POST_METHOD,
+      method: HTTP_POST_METHOD,
       headers: {
-        "Content-Type": this.JSON_HTTP_HEADER_VALUE,
+        "Content-Type": JSON_HTTP_HEADER_VALUE,
         "X-CSRFToken": this.csrfToken,
       },
       body: JSON.stringify(upload_url),
@@ -128,7 +131,7 @@ export class UploadURLService extends EventTarget {
    * @param {string} upload_id
    */
   check_status(upload_id) {
-    let endpoint_url = `${this.http_prefix}${window.location.host}${this.UPLOAD_ENDPOINT}?id=${upload_id}`;
+    let endpoint_url = `${PROTOCOL_PREFIX}${window.location.host}${this.UPLOAD_ENDPOINT}?id=${upload_id}`;
 
     fetch(endpoint_url)
       .then((response) =>
@@ -164,7 +167,7 @@ export class UploadURLService extends EventTarget {
    */
   list_urls() {
     let endpoint_url =
-      this.http_prefix + window.location.host + this.LIST_URLS_ENDPOINT;
+      PROTOCOL_PREFIX + window.location.host + this.LIST_URLS_ENDPOINT;
 
     this.dispatch_fetch_start_event();
     fetch(endpoint_url)
@@ -198,7 +201,7 @@ export class UploadURLService extends EventTarget {
    * Delete given upload URL.
    */
   delete_url(upload) {
-    let endpoint_url = `${this.http_prefix}${window.location.host}${this.DELETE_URL_ENDPOINT}?id=${upload.id}`;
+    let endpoint_url = `${PROTOCOL_PREFIX}${window.location.host}${this.DELETE_URL_ENDPOINT}?id=${upload.id}`;
 
     this.dispatch_fetch_start_event();
     fetch(endpoint_url)

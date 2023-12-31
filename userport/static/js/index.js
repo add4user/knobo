@@ -1,5 +1,6 @@
 import { LoggedInBaseView } from "./logged_in_base.js";
 import { UploadURL } from "./upload_url.js";
+import { APIKeyView } from "./api_key_view.js";
 
 function main() {
   /**
@@ -20,6 +21,7 @@ function main() {
       break;
     case "/api-key":
       new LoggedInBaseView();
+      new APIKeyView();
       break;
   }
 }

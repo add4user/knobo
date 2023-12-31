@@ -1,8 +1,9 @@
 from flask import Blueprint, render_template, request, session, jsonify
 from flask_login import login_required
 from userport.index import PageSection, PageSectionManager
-from userport.models import UploadStatus, UploadModel, UserModel
-from typing import List, Dict
+from userport.models import UploadStatus, UploadModel, UserModel, APIKeyModel
+from userport.utils import generate_hash
+from typing import List
 from userport.db import (
     insert_page_sections_transactionally,
     create_upload,
@@ -11,9 +12,13 @@ from userport.db import (
     get_user_by_id,
     list_uploads_by_org_domain,
     delete_upload_with_id,
+    insert_api_key,
+    get_api_key_for_domain,
+    delete_api_key_for_domain,
     NotFoundException
 )
 from celery import shared_task
+import secrets
 
 bp = Blueprint('application', __name__)
 
@@ -79,7 +84,7 @@ def list_urls():
     except NotFoundException as e:
         print(e)
         raise APIException(
-            status_code=400, message=f"User with id {user_id} not found")
+            status_code=404, message=f"User with id {user_id} not found")
     except Exception as e:
         print(e)
         raise APIException(
@@ -111,7 +116,12 @@ def upload_url():
     """
     if request.method == 'POST':
         user_id = get_user_id()
-        data = request.get_json()
+        try:
+            data = request.get_json()
+        except Exception as e:
+            raise APIException(
+                status_code=400, message='Request expected to have JSON data but doesn\'t')
+
         if 'url' not in data:
             raise APIException(
                 status_code=400, message='Missing URL in request')
@@ -208,7 +218,7 @@ def delete_url():
     except NotFoundException as e:
         print(e)
         raise APIException(
-            status_code=400, message=f"Did not find upload with ID: {upload_id}")
+            status_code=404, message=f"Did not find upload with ID: {upload_id}")
     except Exception as e:
         print(e)
         raise APIException(
@@ -229,3 +239,71 @@ def api_key_view():
     View to allow creation and display of API key.
     """
     return render_template('application/api_key.html')
+
+
+@bp.route('/api/v1/api-key', methods=['POST', 'GET', 'DELETE'])
+@login_required
+def create_api_key():
+    """
+    View to allow creation and display of API key.
+    """
+    user_id = get_user_id()
+    user: UserModel
+    try:
+        user = get_user_by_id(user_id)
+    except Exception as e:
+        print(e)
+        raise APIException(
+            status_code=500, message=f'User with id {user_id} does not exist')
+
+    if request.method == 'POST':
+        # Check if key already exists.
+        try:
+            get_api_key_for_domain(org_domain=user.org_domain)
+            raise APIException(
+                status_code=409, message=f'API key already exists in org {user.org_domain}')
+        except NotFoundException as e:
+            # Do nothing since this is expected.
+            pass
+        except Exception as e:
+            print(e)
+            raise APIException(
+                status_code=500, message=f'Server error when trying to fetch API key for domain: {user.org_domain}')
+
+        # Generate new key.
+        key_value: str = secrets.token_urlsafe(16)
+        hashed_key_value: str = generate_hash(key_value)
+        api_key_model = APIKeyModel(id=hashed_key_value,
+                                    key_prefix=key_value[:5], org_domain=user.org_domain, creator_id=user_id)
+        try:
+            insert_api_key(api_key_model)
+        except Exception as e:
+            print(e)
+            raise APIException(
+                status_code=500, message=f"Failed to create API key for user {user_id}")
+
+        return {"key": api_key_model.model_dump(), "raw_value": key_value}, 200
+    elif request.method == 'GET':
+        api_key_model: APIKeyModel
+        try:
+            api_key_model = get_api_key_for_domain(org_domain=user.org_domain)
+        except NotFoundException as e:
+            # Return empty key.
+            return {"key": ""}, 200
+        except Exception as e:
+            print(e)
+            raise APIException(
+                status_code=500, message=f'Ran into error fetching API key for domain {user.org_domain}')
+
+        return {"key": api_key_model.model_dump()}, 200
+    elif request.method == 'DELETE':
+        try:
+            delete_api_key_for_domain(org_domain=user.org_domain)
+        except NotFoundException as e:
+            raise APIException(status_code=404, message=str(e))
+        except Exception as e:
+            print(e)
+            raise APIException(
+                status_code=500, message=f'Failed to delete API key for domain {user.org_domain}')
+
+        return {}, 200
