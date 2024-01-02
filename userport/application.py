@@ -22,7 +22,7 @@ import secrets
 
 bp = Blueprint('application', __name__)
 
-# Remove when not debugging.
+# Set to false when not debugging.
 debug = True
 
 
@@ -70,9 +70,9 @@ def uploads_view():
     return render_template('application/uploads.html')
 
 
-@bp.route('/api/v1/list_urls', methods=['GET'])
+@bp.route('/api/v1/urls', methods=['GET'])
 @login_required
-def list_urls():
+def handle_urls():
     """
     Fetch list of URLs uploaded for the user's organization domain.
     """
@@ -103,9 +103,9 @@ def list_urls():
                         for upload_model in upload_model_list]}, 200
 
 
-@bp.route('/api/v1/upload_url', methods=['GET', 'POST'])
+@bp.route('/api/v1/url', methods=['POST', 'GET', 'DELETE'])
 @login_required
-def upload_url():
+def handle_url():
     """
     POST:
     URL uploaded by user. The API dispatches upload work to the background (via Celery)
@@ -113,6 +113,9 @@ def upload_url():
 
     GET:
     Fetch uploaded URL using given upload ID.
+
+    DELETE:
+    Delete URL with given upload ID.
     """
     if request.method == 'POST':
         user_id = get_user_id()
@@ -154,7 +157,7 @@ def upload_url():
             raise APIException(status_code=500,
                                message=f"Internal error! Failed to initiate upload for URL: {url}")
         return upload_model.model_dump(), 200
-    else:
+    elif request.method == 'GET':
         # Fetch upload status.
         upload_id = request.args.get('id', '')
         if upload_id == '':
@@ -173,11 +176,30 @@ def upload_url():
         if debug:
             update_upload_status(upload_id=upload_id,
                                  upload_status=UploadStatus.COMPLETE)
-
         return got_model_dict, 200
+    else:
+        # Delete uploaded URL.
+        upload_id = request.args.get('id', '')
+        if upload_id == '':
+            raise APIException(
+                status_code=400, message='Missing ID in upload request')
+
+        try:
+            delete_upload_with_id(upload_id)
+        except NotFoundException as e:
+            print(e)
+            raise APIException(
+                status_code=404, message=f"Did not find upload with ID: {upload_id}")
+        except Exception as e:
+            print(e)
+            raise APIException(
+                status_code=500, message=f"Internal error! Could not delete upload with ID: {upload_id}")
+
+        return {}, 200
 
 
-@shared_task()
+# Upload URL via Celery task. Retries with 5 second delay up to 3 times in case of exception.
+@shared_task(bind=True, autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})
 def background_upload_url(user_id: str, url: str, upload_id: str):
     """
     Celery task to index page associated with given URL.
@@ -200,31 +222,6 @@ def background_upload_url(user_id: str, url: str, upload_id: str):
     print("Done with writing sections collection")
     update_upload_status(upload_id=upload_id,
                          upload_status=UploadStatus.COMPLETE)
-
-
-@bp.route('/api/v1/delete_url', methods=['GET'])
-@login_required
-def delete_url():
-    """
-    Delete URL with given upload ID.
-    """
-    upload_id = request.args.get('id', '')
-    if upload_id == '':
-        raise APIException(
-            status_code=400, message='Missing ID in upload request')
-
-    try:
-        delete_upload_with_id(upload_id)
-    except NotFoundException as e:
-        print(e)
-        raise APIException(
-            status_code=404, message=f"Did not find upload with ID: {upload_id}")
-    except Exception as e:
-        print(e)
-        raise APIException(
-            status_code=500, message=f"Internal error! Could not delete upload with ID: {upload_id}")
-
-    return {}, 200
 
 
 """

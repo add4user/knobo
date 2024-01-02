@@ -185,7 +185,7 @@ def update_upload_status(upload_id: str, upload_status: UploadStatus, error_mess
     """
     uploads = _get_uploads()
     if not uploads.find_one_and_update({'_id': ObjectId(upload_id)}, {'$set': {'status': upload_status, 'error_message': error_message}}):
-        raise ValueError(
+        raise NotFoundException(
             f"No model found to update status with id: {upload_id}")
 
 
