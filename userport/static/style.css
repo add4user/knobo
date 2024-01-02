@@ -402,7 +402,6 @@ body {
 
 #uploads-list li button:disabled {
   cursor: auto;
-  /* border: 1px solid gray; */
   border: none;
   background-color: #cccccc;
   color: gray;
@@ -467,4 +466,154 @@ body {
   cursor: pointer;
   color: white;
   background-color: rgb(211, 44, 44);
+}
+
+/* Widget Styles, will be moved to separate file after testing. */
+
+/* Global variables for the widget */
+:root {
+  /* Width of the chat widget. */
+  --userport-widget-width: 350px;
+  /* z-index of the widget and button. */
+  --userport-z-index: 5;
+  /* border width for the widget */
+  --userport-border-width: 0.8px;
+  /* Border radius for the widget. */
+  --userport-border-radius: 10px;
+  /* Distance of the widget from right side of page. */
+  --userport-widget-right-position: 50px;
+  /* Distance of the widget button from the bottom of the page. */
+  --userport-widget-button-bottom-position: 50px;
+  /* Height of the widget button. */
+  --userport-widget-button-height: 40px;
+  /* Percent height of chat header. */
+  --userport-chat-header-height-percent: 8%;
+  /* Percent height of the chat messages container. */
+  --userport-chat-messages-height-percent: 77%;
+  /* Percent width of the query input. */
+  --userport-chat-query-input-width-percent: 85%;
+  /* Percent height of powered by userport footer. */
+  --userport-powered-by-footer-height-percent: 5%;
+  /* Background Color of header and footer of chat message. */
+  /* --userport-chat-header-footer-background-color: #5743d6; */
+  --userport-chat-header-footer-background-color: #6457bc;
+}
+
+#userport-widget-container {
+  position: relative;
+}
+
+#userport-chat-container {
+  position: absolute;
+  right: var(--userport-widget-right-position);
+  /* We add 10px margin to button top.*/
+  bottom: calc(
+    var(--userport-widget-button-bottom-position) +
+      var(--userport-widget-button-height) + 10px
+  );
+  z-index: var(--userport-z-index);
+
+  width: var(--userport-widget-width);
+  height: 500px;
+  border-top-right-radius: var(--userport-border-radius);
+  border-top-left-radius: var(--userport-border-radius);
+  padding-top: 5px;
+  border: var(--userport-border-width) solid grey;
+  background-color: var(--userport-chat-header-footer-background-color);
+  box-shadow: 2px 2px 3px #aaaaaa;
+}
+
+#userport-chat-header {
+  height: var(--userport-chat-header-height-percent);
+  background-color: var(--userport-chat-header-footer-background-color);
+
+  display: flex;
+  justify-content: center;
+}
+
+#userport-chat-header > p {
+  color: white;
+  font-size: 0.9rem;
+}
+
+#userport-chat-messages-container {
+  height: var(--userport-chat-messages-height-percent);
+  background-color: white;
+}
+
+#userport-input-container {
+  height: calc(
+    100% - var(--userport-chat-header-height-percent) -
+      var(--userport-powered-by-footer-height-percent) -
+      var(--userport-chat-messages-height-percent)
+  );
+
+  display: flex;
+}
+
+#userport-query-textarea {
+  width: var(--userport-chat-query-input-width-percent);
+  font-size: 0.9rem;
+  padding: 10px 5px;
+  border-style: none;
+
+  line-height: 1.2rem;
+  word-spacing: 1px;
+  color: rgb(89, 88, 88);
+  outline: none;
+  border-top: var(--userport-border-width) solid grey;
+}
+
+#userport-query-btn {
+  width: calc(100% - var(--userport-chat-query-input-width-percent));
+  border-style: none;
+
+  background-color: white;
+  color: var(--userport-chat-header-footer-background-color);
+  border-left: var(--userport-border-width) solid grey;
+  border-top: var(--userport-border-width) solid grey;
+  font-size: 1.8rem;
+}
+
+#userport-query-btn:hover {
+  cursor: pointer;
+}
+
+#userport-powered-by-footer {
+  height: var(--userport-powered-by-footer-height-percent);
+  background-color: var(--userport-chat-header-footer-background-color);
+
+  display: flex;
+  justify-content: center;
+}
+
+#userport-powered-by-footer > p {
+  font-size: 0.3rem;
+  color: white;
+}
+
+#userport-widget-btn {
+  position: absolute;
+  right: var(--userport-widget-right-position);
+  bottom: var(--userport-widget-button-bottom-position);
+  z-index: var(--userport-z-index);
+
+  width: 100px;
+  height: var(--userport-widget-button-height);
+  font-size: medium;
+  border-radius: 10px;
+  border: 1px solid var(--userport-chat-header-footer-background-color);
+  color: var(--userport-chat-header-footer-background-color);
+  background-color: white;
+  box-shadow: 2px 2px 2px #aaaaaa;
+}
+
+#userport-widget-btn:hover {
+  cursor: pointer;
+  background-color: var(--userport-chat-header-footer-background-color);
+  color: white;
+}
+
+.userport-hidden {
+  display: none;
 }

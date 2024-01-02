@@ -23,6 +23,26 @@
       </li>
     </ul>
   </div>
-  <div id="main-content">{% block main_content %}{% endblock %}</div>
+  <div id="main-content">
+    {% block main_content %}{% endblock %}
+  </div>
+  <div id="userport-widget-container">
+    <div id="userport-chat-container" class="userport-hidden">
+        <div id="userport-chat-header">
+            <p>Chat with AI</p>
+        </div>
+        <div id="userport-chat-messages-container">
+        <!-- TODO: add messages -->
+        </div>
+        <div id="userport-input-container">
+            <textarea id="userport-query-textarea" placeholder="Enter your query here!"></textarea>
+            <button id="userport-query-btn">&#9654</button>
+        </div>
+        <div id="userport-powered-by-footer">
+            <p>Powered by Userport</p>
+        </div>
+    </div>
+    <button id="userport-widget-btn">Ask AI</button>
+  </div>
 </div>
 {% endblock %}

@@ -1,3 +1,5 @@
+import { ChatService, ChatState } from "./chat_service.js";
+
 export class LoggedInBaseView {
   /**
    * Contains logic associated with the common logged in view of the user.
@@ -18,6 +20,15 @@ export class LoggedInBaseView {
         a.classList.add("active");
       }
     });
+
+    // Temporary code which will be moved to separate codebase after testing.
+    this.chatBtn = document.querySelector("#userport-widget-btn");
+    this.chatContainer = document.querySelector("#userport-chat-container");
+    this.chatBtn.addEventListener(
+      "click",
+      this.handleChatButtonClick.bind(this)
+    );
+    this.chatService = new ChatService();
   }
 
   /**
@@ -26,5 +37,16 @@ export class LoggedInBaseView {
    */
   handleUserAccountClick(event) {
     this.dropDownContent.classList.toggle("show");
+  }
+
+  // Temporary code which will be moved to separate codebase after testing.
+  handleChatButtonClick() {
+    const chatState = this.chatService.toggleState();
+    if (chatState === ChatState.OPEN) {
+      this.chatBtn.innerText = "X";
+    } else {
+      this.chatBtn.innerText = "Ask AI";
+    }
+    this.chatContainer.classList.toggle("userport-hidden");
   }
 }
