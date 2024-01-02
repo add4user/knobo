@@ -495,8 +495,9 @@ body {
   /* Percent height of powered by userport footer. */
   --userport-powered-by-footer-height-percent: 5%;
   /* Background Color of header and footer of chat message. */
-  /* --userport-chat-header-footer-background-color: #5743d6; */
   --userport-chat-header-footer-background-color: #6457bc;
+  /* Chat Message header and footer font size */
+  --userport-chat-message-header-footer-font-size: 0.7rem;
 }
 
 #userport-widget-container {
@@ -538,7 +539,68 @@ body {
 
 #userport-chat-messages-container {
   height: var(--userport-chat-messages-height-percent);
-  background-color: white;
+  background-color: rgb(241, 239, 239);
+
+  /* To allow scrolling of chat messages. */
+  overflow-y: scroll;
+  display: flex;
+  flex-direction: column-reverse;
+}
+
+#userport-chat-messages-list {
+  list-style-type: none;
+  margin: 0;
+  padding: 0;
+}
+
+.userport-message-common-container {
+  width: 66%;
+  line-height: 1.2rem;
+  word-spacing: 1px;
+  color: rgb(89, 88, 88);
+
+  display: flex;
+  flex-direction: column;
+}
+
+.userport-bot-container {
+  margin-left: 0%;
+  padding-left: 10px;
+}
+
+.userport-human-container {
+  margin-left: 30%;
+  padding-right: 10px;
+}
+
+.userport-message-common-header {
+  margin-bottom: 0;
+  margin-top: 0;
+  padding: 2px 2px;
+  font-size: var(--userport-chat-message-header-footer-font-size);
+}
+
+.userport-common-message {
+  margin-top: 0;
+  margin-bottom: 0;
+  font-size: 0.9rem;
+  padding: 5px 5px;
+  border-radius: 5px;
+}
+
+.userport-bot-message {
+  background-color: #a5dbff;
+}
+
+.userport-human-message {
+  background-color: #a9f1b2;
+}
+
+.userport-common-message-footer {
+  margin-top: 0;
+  margin-bottom: 0;
+  font-size: var(--userport-chat-message-header-footer-font-size);
+  text-align: end;
 }
 
 #userport-input-container {
