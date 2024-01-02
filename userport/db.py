@@ -200,15 +200,13 @@ def list_uploads_by_org_domain(org_domain: str) -> List[UploadModel]:
     return upload_model_list
 
 
-def delete_upload_with_id(upload_id: str):
+def upload_already_has_sections(upload_id: str) -> bool:
     """
-    Delete upload with given ID. Throws error if deleted count is not 1.
+    Returns true if upload already has sections associated with it else returns false.
     """
-    uploads = _get_uploads()
-    result = uploads.delete_one({'_id': ObjectId(upload_id)})
-    if result.deleted_count != 1:
-        raise NotFoundException(
-            f"Expected 1 doc to be deleted, got {result.deleted_count} deleted")
+    sections = _get_sections()
+    section_dict = sections.find_one({"upload_id": upload_id})
+    return True if section_dict else False
 
 
 def insert_page_sections_transactionally(user_id: str, url: str, upload_id: str, root_page_section: PageSection):
@@ -245,6 +243,22 @@ def insert_page_sections_transactionally(user_id: str, url: str, upload_id: str,
 
                 for child_page_section in page_section.child_sections:
                     q.put((child_page_section, section_id))
+
+
+def delete_upload_and_sections_transactionally(upload_id: str):
+    """
+    Delete upload and all associated sections in a single transaction. 
+    """
+    client = _get_mongo_client()
+    uploads = _get_uploads()
+    sections = _get_sections()
+    with client.start_session() as session:
+        with session.start_transaction():
+            deleted_result = sections.delete_many({'upload_id': upload_id})
+            deleted_result = uploads.delete_one({'_id': ObjectId(upload_id)})
+            if deleted_result.deleted_count != 1:
+                raise NotFoundException(
+                    f"Expected 1 doc to be deleted, got {deleted_result.deleted_count} deleted")
 
 
 def insert_api_key(api_key_model: APIKeyModel):

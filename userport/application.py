@@ -11,7 +11,8 @@ from userport.db import (
     get_upload_by_id,
     get_user_by_id,
     list_uploads_by_org_domain,
-    delete_upload_with_id,
+    delete_upload_and_sections_transactionally,
+    upload_already_has_sections,
     insert_api_key,
     get_api_key_for_domain,
     delete_api_key_for_domain,
@@ -185,11 +186,7 @@ def handle_url():
                 status_code=400, message='Missing ID in upload request')
 
         try:
-            delete_upload_with_id(upload_id)
-        except NotFoundException as e:
-            print(e)
-            raise APIException(
-                status_code=404, message=f"Did not find upload with ID: {upload_id}")
+            delete_upload_and_sections_transactionally(upload_id)
         except Exception as e:
             print(e)
             raise APIException(
@@ -200,24 +197,27 @@ def handle_url():
 
 # Upload URL via Celery task. Retries with 5 second delay up to 3 times in case of exception.
 @shared_task(bind=True, autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})
-def background_upload_url(user_id: str, url: str, upload_id: str):
+def background_upload_url(self, user_id: str, url: str, upload_id: str):
     """
     Celery task to index page associated with given URL.
     """
-    psm = PageSectionManager()
-    print("Fetching page sections....")
-    try:
-        root_page_section: PageSection = psm.fetch(url)
-    except Exception as e:
-        update_upload_status(upload_id=upload_id,
-                             upload_status=UploadStatus.FAILED, error_message=str(e))
-    print("Beginning write to database...")
-    try:
-        insert_page_sections_transactionally(
-            user_id=user_id, url=url, upload_id=upload_id, root_page_section=root_page_section)
-    except Exception as e:
-        update_upload_status(upload_id=upload_id,
-                             upload_status=UploadStatus.FAILED, error_message=str(e))
+    if not upload_already_has_sections(upload_id):
+        psm = PageSectionManager()
+        print("Fetching page sections....")
+        try:
+            root_page_section: PageSection = psm.fetch(url)
+        except Exception as e:
+            update_upload_status(upload_id=upload_id,
+                                 upload_status=UploadStatus.FAILED, error_message=str(e))
+        print("Beginning write to database...")
+        try:
+            insert_page_sections_transactionally(
+                user_id=user_id, url=url, upload_id=upload_id, root_page_section=root_page_section)
+        except Exception as e:
+            update_upload_status(upload_id=upload_id,
+                                 upload_status=UploadStatus.FAILED, error_message=str(e))
+    else:
+        print("Upload already has sections")
 
     print("Done with writing sections collection")
     update_upload_status(upload_id=upload_id,
