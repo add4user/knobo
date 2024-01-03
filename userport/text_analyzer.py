@@ -5,8 +5,7 @@ import json
 
 class TextAnalyzer:
     """
-    Contains helpers to summarize text, generate embeddings and
-    return important entities.
+    Contains helpers to summarize text, generate embeddings and generate proper nouns.
     """
 
     def __init__(self, debug=False) -> None:

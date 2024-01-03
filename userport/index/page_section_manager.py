@@ -1,7 +1,7 @@
 from userport.utils import fetch_html_page
 from userport.index.html_parser import parse_html
 from userport.index.html_node import HTMLSection
-from userport.index.text_analyzer import TextAnalyzer
+from userport.text_analyzer import TextAnalyzer
 from typing import List
 from dataclasses import dataclass, field
 from queue import Queue
