@@ -24,7 +24,7 @@ import secrets
 bp = Blueprint('application', __name__)
 
 # Set to false when not debugging.
-debug = True
+debug = False
 
 
 class APIException(Exception):
@@ -207,21 +207,37 @@ def background_upload_url(self, user_id: str, url: str, upload_id: str):
         try:
             root_page_section: PageSection = psm.fetch(url)
         except Exception as e:
-            update_upload_status(upload_id=upload_id,
-                                 upload_status=UploadStatus.FAILED, error_message=str(e))
+            print(e)
+            try:
+                update_upload_status(upload_id=upload_id,
+                                     upload_status=UploadStatus.FAILED, error_message=str(e))
+            except Exception as err:
+                print(err)
+                raise err
+            raise e
         print("Beginning write to database...")
         try:
             insert_page_sections_transactionally(
                 user_id=user_id, url=url, upload_id=upload_id, root_page_section=root_page_section)
         except Exception as e:
-            update_upload_status(upload_id=upload_id,
-                                 upload_status=UploadStatus.FAILED, error_message=str(e))
+            print(e)
+            try:
+                update_upload_status(upload_id=upload_id,
+                                     upload_status=UploadStatus.FAILED, error_message=str(e))
+            except Exception as err:
+                print(err)
+                raise err
+            raise e
     else:
         print("Upload already has sections")
 
     print("Done with writing sections collection")
-    update_upload_status(upload_id=upload_id,
-                         upload_status=UploadStatus.COMPLETE)
+    try:
+        update_upload_status(upload_id=upload_id,
+                             upload_status=UploadStatus.COMPLETE)
+    except Exception as e:
+        print(e)
+        raise e
 
 
 """
@@ -240,7 +256,7 @@ def api_key_view():
 
 @bp.route('/api/v1/api-key', methods=['POST', 'GET', 'DELETE'])
 @login_required
-def create_api_key():
+def handle_api_key():
     """
     View to allow creation and display of API key.
     """

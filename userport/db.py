@@ -130,11 +130,18 @@ def _get_current_time() -> datetime:
     return datetime.now(tz=timezone.utc)
 
 
-def _join_proper_nouns(proper_nouns_list: List[str]) -> str:
+def _cleaned_proper_nouns_in_doc(proper_nouns_list: List[str]) -> List[str]:
     """
-    Helper that returns a string from given list of proper nouns.
+    Since MongoDB allows mostly comparison operators in search query, we plan to use $in operator
+    when filtering for docs during vector search. To use $in operator, we probably need each word
+    to be separate so that the $in operator works. This function is to split multi-word proper nouns
+    into separate words in the list in addition to the existing multi-word proper nouns as well.
     """
-    return " ".join(proper_nouns_list)
+    cleaned_proper_nouns_set = set()
+    for noun in proper_nouns_list:
+        cleaned_proper_nouns_set.add(noun)
+        cleaned_proper_nouns_set.update(noun.split())
+    return list(cleaned_proper_nouns_set)
 
 
 def create_user_and_organization_transactionally(user_model: UserModel, organization_model: OrganizationModel):
@@ -230,13 +237,11 @@ def insert_page_sections_transactionally(user_id: str, url: str, upload_id: str,
                 qItem = q.get()
                 page_section: PageSection = qItem[0]
                 parent_section_id: str = qItem[1]
-                proper_nouns_in_section = _join_proper_nouns(
-                    page_section.proper_nouns_in_section)
-                proper_nouns_in_doc = _join_proper_nouns(
+                proper_nouns_in_doc = _cleaned_proper_nouns_in_doc(
                     page_section.proper_nouns_in_doc)
 
                 section_model = SectionModel(upload_id=upload_id, org_domain=user.org_domain, parent_section_id=parent_section_id, url=url, text=page_section.text, summary=page_section.summary, prev_sections_context=page_section.prev_sections_context,
-                                             summary_vector_embedding=page_section.summary_vector_embedding, proper_nouns_in_section=proper_nouns_in_section, proper_nouns_in_doc=proper_nouns_in_doc, creator_id=user_id, created=current_time)
+                                             summary_vector_embedding=page_section.summary_vector_embedding, proper_nouns_in_section=page_section.proper_nouns_in_section, proper_nouns_in_doc=proper_nouns_in_doc, creator_id=user_id, created=current_time)
                 result = sections.insert_one(
                     section_model.model_dump(exclude=['id']))
                 section_id = str(result.inserted_id)
