@@ -2,6 +2,7 @@ from flask import Blueprint, render_template, request, session, jsonify
 from flask_login import login_required
 from userport.index import PageSection, PageSectionManager
 from userport.models import UploadStatus, UploadModel, UserModel, APIKeyModel
+from userport.inference_assistant import InferenceAssistant, InferenceResult
 from userport.utils import generate_hash
 from typing import List
 from userport.db import (
@@ -15,6 +16,7 @@ from userport.db import (
     upload_already_has_sections,
     insert_api_key,
     get_api_key_for_domain,
+    get_api_key_from_hashed_value,
     delete_api_key_for_domain,
     NotFoundException
 )
@@ -24,7 +26,7 @@ import secrets
 bp = Blueprint('application', __name__)
 
 # Set to false when not debugging.
-debug = False
+debug = True
 
 
 class APIException(Exception):
@@ -286,8 +288,8 @@ def handle_api_key():
         # Generate new key.
         key_value: str = secrets.token_urlsafe(16)
         hashed_key_value: str = generate_hash(key_value)
-        api_key_model = APIKeyModel(id=hashed_key_value,
-                                    key_prefix=key_value[:5], org_domain=user.org_domain, creator_id=user_id)
+        api_key_model = APIKeyModel(
+            key_prefix=key_value[:5], hashed_key_value=hashed_key_value, org_domain=user.org_domain, creator_id=user_id)
         try:
             insert_api_key(api_key_model)
         except Exception as e:
@@ -320,3 +322,74 @@ def handle_api_key():
                 status_code=500, message=f'Failed to delete API key for domain {user.org_domain}')
 
         return {}, 200
+
+
+"""
+Inference APIs.
+"""
+
+
+@bp.route('/api/v1/inference', methods=['POST'])
+@login_required
+def perform_inference():
+    user_id = get_user_id()
+    user: UserModel
+    try:
+        user = get_user_by_id(user_id)
+    except Exception as e:
+        print(e)
+        raise APIException(
+            status_code=500, message=f'User with id {user_id} does not exist')
+
+    if 'X-API-KEY' not in request.headers:
+        raise APIException(
+            status_code=400, message='Missing Authentication Credentials')
+
+    # Authenticate request.
+    api_key: str = request.headers['X-API-KEY']
+    try:
+        api_key_model: APIKeyModel = get_api_key_from_hashed_value(
+            hashed_key_value=generate_hash(api_key))
+        if api_key_model.org_domain != user.org_domain:
+            raise NotFoundException(
+                f'User org {user.org_domain} does not match API key org: {api_key_model.org_domain}')
+    except NotFoundException as e:
+        print(e)
+        raise APIException(
+            status_code=403, message='Invalid Authentication credentials')
+    except Exception as e:
+        print(e)
+        raise APIException(
+            status_code=500, message="Failed to post a chat message")
+
+    # Get data from request body.
+    try:
+        data = request.get_json()
+    except Exception as e:
+        raise APIException(
+            status_code=400, message='Chat request expected to have JSON data but doesn\'t')
+
+    if 'user_query' not in data:
+        raise APIException(
+            status_code=400, message='Missing query in Chat request')
+    user_query = data['user_query']
+
+    print("got user query: ", user_query)
+
+    # Run inference.
+    if_assistant = InferenceAssistant()
+    if_result: InferenceResult = if_assistant.answer(
+        user_org_domain=user.org_domain, user_query=user_query)
+
+    print("exception if any: ", if_result.exception)
+    print("Got the following docs")
+    for section in if_result.sections_with_scores:
+        print("\n\n\n")
+        print("section id: ", section.id)
+        print("section summary: ", section.summary[:100])
+        print("section proper nouns in doc: ", section.proper_nouns_in_doc)
+        print("section url: ", section.url)
+        print("section score: ", section.score)
+
+    # Hardcore response for now.
+    return {"text": "Extensions are extra packages that add functionality to a Flask application.", "message_creator_type": "BOT", "created": "test"}, 200

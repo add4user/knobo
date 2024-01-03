@@ -4,6 +4,7 @@ from openai import OpenAI
 from typing import List
 from openai.types.chat import ChatCompletion, ChatCompletionMessage
 from openai.types import CompletionChoice, CreateEmbeddingResponse, Embedding
+from tenacity import retry, wait_random, stop_after_attempt
 from dotenv import load_dotenv
 load_dotenv()  # take environment variables from .env.
 
@@ -21,6 +22,7 @@ class OpenAIManager:
         self.embedding_model = os.environ.get("OPENAI_EMBEDDING_MODEL")
         self.JSON_RESPONSE_FORMAT = {"type": "json_object"}
 
+    @retry(wait=wait_random(min=1, max=2), stop=stop_after_attempt(3))
     def create_response(self, message: str, system_message: str, json_response: bool = False, temperature: float = 1.0) -> str:
         """
         Creates response for given input message. 
@@ -63,6 +65,7 @@ class OpenAIManager:
         chat_completion_message: ChatCompletionMessage = chat_completion_choice.message
         return chat_completion_message.content
 
+    @retry(wait=wait_random(min=1, max=2), stop=stop_after_attempt(3))
     def get_embedding(self, text: str) -> List[float]:
         """
         Returns an embedding vector for given text input.

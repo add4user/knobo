@@ -2,7 +2,15 @@ from flask import current_app, g
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
 from pymongo.collection import Collection
-from userport.models import UserModel, OrganizationModel, SectionModel, UploadModel, UploadStatus, APIKeyModel
+from userport.models import (
+    UserModel,
+    OrganizationModel,
+    SectionModel,
+    UploadModel,
+    UploadStatus,
+    APIKeyModel,
+    VectorSearchSectionResult
+)
 from datetime import datetime, timezone
 from bson.objectid import ObjectId
 from typing import Optional, Dict, List, Type
@@ -27,6 +35,13 @@ def _get_mongo_client() -> MongoClient:
 def _get_db():
     mongo_client = _get_mongo_client()
     return mongo_client[current_app.config['MONGO_DB_NAME']]
+
+
+def _get_vector_index_name() -> str:
+    """
+    Returns name of vector index to use to perform search.
+    """
+    return "sections_vector_index"
 
 
 def _get_users() -> Collection:
@@ -266,6 +281,59 @@ def delete_upload_and_sections_transactionally(upload_id: str):
                     f"Expected 1 doc to be deleted, got {deleted_result.deleted_count} deleted")
 
 
+def vector_search_sections(user_org_domain: str, query_vector_embedding: List[float], query_proper_nouns: List[str], document_limit: int) -> List[VectorSearchSectionResult]:
+    """
+    Performs vector search to retrieve most relevant sections associated with given query.
+    """
+    sections = _get_sections()
+    pipeline = [
+        {
+            "$vectorSearch": {
+                "index": _get_vector_index_name(),
+                "path": "summary_vector_embedding",
+                "queryVector":  query_vector_embedding,
+                # Number must be between document limit and 10000.
+                # Documentation recommends ratio of 10 to 20 nearest neighbors for limit of 1 document.
+                "numCandidates": int(min(10000, 20*document_limit)),
+                "limit": document_limit,
+                "filter": {
+                    "$and": [
+                        {
+                            "org_domain": {
+                                "$eq": user_org_domain,
+                            },
+                        },
+                        {
+                            "proper_nouns_in_doc": {
+                                "$in": query_proper_nouns,
+                            }
+                        },
+                    ]
+
+                }
+            },
+        },
+        {
+            "$project": {
+                '_id': 1,
+                'org_domain': 1,
+                'url': 1,
+                'summary': 1,
+                'proper_nouns_in_doc': 1,
+                'score': {
+                    '$meta': 'vectorSearchScore'
+                }
+            }
+        }
+    ]
+    results = sections.aggregate(pipeline)
+
+    vss_results: List[VectorSearchSectionResult] = []
+    for res in results:
+        vss_results.append(VectorSearchSectionResult(**res))
+    return vss_results
+
+
 def insert_api_key(api_key_model: APIKeyModel):
     """
     Insert API key in the database.
@@ -284,6 +352,18 @@ def get_api_key_for_domain(org_domain: str) -> APIKeyModel:
     if not api_key_dict:
         raise NotFoundException(
             f'API key not found for Org domain {org_domain}')
+    return APIKeyModel(**api_key_dict)
+
+
+def get_api_key_from_hashed_value(hashed_key_value: str) -> APIKeyModel:
+    """
+    Fetch API Key with given ID.
+    """
+    api_keys = _get_api_keys()
+    api_key_dict = api_keys.find_one({"hashed_key_value": hashed_key_value})
+    if not api_key_dict:
+        raise NotFoundException(
+            f'API key not found for hashed value: {hashed_key_value}')
     return APIKeyModel(**api_key_dict)
 
 

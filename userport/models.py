@@ -10,6 +10,105 @@ from enum import Enum
 # throw an error.
 PyObjectId = Annotated[str, BeforeValidator(str)]
 
+"""
+Collection: AssistantResponseRecords
+"""
+
+
+class VectorSearchSectionResult(BaseModel):
+    """
+    Contains result of vector search. It is an embedded model and does
+    not have a collection of its own.
+    """
+    # ID of the section. To get other fields of the section, we can just
+    # do another read during analysis to pull that information.
+    id: Optional[PyObjectId] = Field(alias="_id", default=None)
+    # Domain of the org containing this section.
+    org_domain: str = Field(...)
+    # URL of the document the section is part of.
+    url: str = Field(...)
+    # Detailed summary of given section.
+    summary: str = Field(...)
+    # Proper nouns in the associated document of this section.
+    proper_nouns_in_doc: List[str] = []
+    # Document score associated with search query (stored in parent model).
+    score: float = Field(...)
+
+
+class AssistantInferenceModel(BaseModel):
+    """
+    Represents the response by an assistant to a user query. Used for
+    analytics and measurement purposes.
+    TODO: Complete this model.
+    """
+    id: Optional[PyObjectId] = Field(alias="_id", default=None)
+    # User query.
+
+    # User query embedding.
+
+    # User query context.
+
+    # Text response of the assistant.
+
+    # Proper nouns detected from user query and context.
+
+    # Final Sections returned from vector search.
+
+    # Section chosen by LLM as response.
+
+    # Feedback provided by user (if any) for this response.
+
+    # Latency of response generation in ms.
+
+    # Exception (if any) that the inference ran into.
+
+    # Org domain.
+
+    # ID of user with which the conversation is happening.
+
+    # Created time.
+
+
+"""
+Collection: ChatMessages
+"""
+
+
+class MessageCreatorType(str, Enum):
+    HUMAN = "HUMAN"
+    BOT = "BOT"
+
+
+class FeedbackModel(BaseModel):
+    """
+    Represents feedback from user about chat response from bot.
+    """
+    liked: Optional[bool] = None
+    text: str = Field(default="")
+
+
+class ChatMessageModel(BaseModel):
+    """
+    Represents a chat conversation message between Bot and a user.
+    """
+    id: Optional[PyObjectId] = Field(alias="_id", default=None)
+    # Domain of the org in which the conversation is taking place should be globally unique.
+    org_domain: str = Field(...)
+    # ID of the end human user that the conversation is with.
+    human_user_id: str = Field(...)
+    # Time when this message was created.
+    created: Optional[datetime] = None
+    # Text associated with the message.
+    text: str = Field(...)
+    # Any feedback associated with the message. Should be empty for HUMAN messages.
+    feedback: Optional[FeedbackModel] = Field(default=None)
+    # Type of the Message creator (HUMAN or BOT).
+    message_creator_type: MessageCreatorType = Field(...)
+    # Message creator ID. Applies to both HUMAN and BOT.
+    message_creator_id: str = Field(...)
+    # Time when this message was updated (probably when feedback is provided).
+    updated: Optional[datetime] = None
+
 
 class UploadStatus(str, Enum):
     IN_PROGRESS = 'IN_PROGRESS'
@@ -69,10 +168,10 @@ class SectionModel(BaseModel):
     # Vector Embedding of the detailed summary.
     summary_vector_embedding: List[float] = []
     # Proper nouns found in this section.
-    proper_nouns_in_section: str = Field(default="")
+    proper_nouns_in_section: List[str] = []
     # Proper nouns in entire document and is copied to each section (like denormalization)
     # Done to ensure sections from same document have the same score during search.
-    proper_nouns_in_doc: str = Field(default="")
+    proper_nouns_in_doc: List[str] = []
     # ID of the uploader.
     creator_id: str = Field(...)
     # Time when section was written to database.
@@ -88,10 +187,11 @@ class APIKeyModel(BaseModel):
     """
     Representation of API key stored in the database as a collection.
     """
-    # API key value, it is a hashed value.
-    id: Optional[PyObjectId] = Field(serialization_alias="_id")
+    id: Optional[PyObjectId] = Field(alias="_id", default=None)
     # Key prefix to help user manually match key to any key they may hold.
     key_prefix: str = Field(...)
+    # Hashed value of the API key.
+    hashed_key_value: str = Field(...)
     # Domain of the org which should be globally unique.
     org_domain: str = Field(...)
     # ID of the creator.

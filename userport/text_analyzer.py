@@ -1,5 +1,6 @@
 from userport.openai_manager import OpenAIManager
 from typing import List
+from tenacity import retry, wait_random, stop_after_attempt
 import json
 
 
@@ -58,6 +59,7 @@ class TextAnalyzer:
         """
         return self.openai_manager.get_embedding(text)
 
+    @retry(wait=wait_random(min=1, max=2), stop=stop_after_attempt(3))
     def generate_proper_nouns(self, text: str) -> List[str]:
         """
         Generates proper nouns from given text and returns them
@@ -70,21 +72,18 @@ class TextAnalyzer:
             print(important_entities_prompt)
             print("\n")
 
-        try:
-            json_response = self._generate_response(
-                prompt=important_entities_prompt, json_response=True)
-            response_obj = json.loads(json_response)
-            assert type(
-                response_obj) == dict, f"Expected Response {response_obj} to be type 'dict'"
-            assert len(
-                response_obj) == 1, f"Expected 1 key in response, got {response_obj} instead"
-            # List should be first elem in list of lists.
-            proper_nouns_list: List[str] = list(response_obj.values())[0]
-            assert type(
-                proper_nouns_list) == list, f"Expected Proper nouns to be {proper_nouns_list} to be a list"
-            return proper_nouns_list
-        except Exception as e:
-            print(f"Ran into exception: {e}")
+        json_response = self._generate_response(
+            prompt=important_entities_prompt, json_response=True)
+        response_obj = json.loads(json_response)
+        assert type(
+            response_obj) == dict, f"Expected Response {response_obj} to be type 'dict'"
+        assert len(
+            response_obj) == 1, f"Expected 1 key in response, got {response_obj} instead"
+        # List should be first elem in list of lists.
+        proper_nouns_list: List[str] = list(response_obj.values())[0]
+        assert type(
+            proper_nouns_list) == list, f"Expected Proper nouns to be {proper_nouns_list} to be a list"
+        return proper_nouns_list
 
     def _generate_response(self, prompt: str, json_response: bool = False) -> str:
         """

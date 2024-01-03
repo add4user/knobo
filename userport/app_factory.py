@@ -37,6 +37,8 @@ def create_app():
     app.register_blueprint(auth.bp)
     app.register_blueprint(application.bp)
 
+    # For inference POST requests, we will rely on API key based authentication.
+    csrf.exempt(application.perform_inference)
     csrf.init_app(app)
     auth.login_manager.init_app(app)
     celery_init_app(app)
