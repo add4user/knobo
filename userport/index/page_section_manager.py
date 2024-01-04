@@ -124,24 +124,26 @@ class PageSectionManager:
         for child_section in root_page_section.child_sections:
             q.put(child_section)
 
-        all_proper_nouns: List[str] = []
+        # Compute all proper nouns.
+        all_proper_nouns_set = set()
         while not q.empty():
             section: PageSection = q.get()
-            all_proper_nouns.extend(section.proper_nouns_in_section)
+            all_proper_nouns_set.update(section.proper_nouns_in_section)
 
             for child_section in section.child_sections:
                 q.put(child_section)
 
-        if len(all_proper_nouns) == 0:
+        if len(all_proper_nouns_set) == 0:
             return root_page_section
 
-        # Denorm: Populate all proper nouns in each section.
+        # Populate all proper nouns in each section.
         for child_section in root_page_section.child_sections:
             q.put(child_section)
 
+        all_proper_nouns_list: List[str] = list(all_proper_nouns_set)
         while not q.empty():
             section: PageSection = q.get()
-            section.proper_nouns_in_doc = all_proper_nouns
+            section.proper_nouns_in_doc = all_proper_nouns_list
 
             for child_section in section.child_sections:
                 q.put(child_section)

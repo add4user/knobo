@@ -1,7 +1,8 @@
 from userport.openai_manager import OpenAIManager
-from typing import List, Optional
+from typing import List
 from tenacity import retry, wait_random, stop_after_attempt
 from dataclasses import dataclass
+from nltk.stem import PorterStemmer
 import json
 
 
@@ -24,6 +25,7 @@ class TextAnalyzer:
 
     def __init__(self, debug=False) -> None:
         self.openai_manager = OpenAIManager()
+        self.ps = PorterStemmer()
         self.system_message = "You are a helpful assistant that answers questions in the most truthful manner possible."
         self.json_mode_system_message = self.system_message + \
             " You output results in only JSON."
@@ -83,17 +85,19 @@ class TextAnalyzer:
     def generate_proper_nouns(self, text: str) -> List[str]:
         """
         Generates proper nouns from given text and returns them
-        as a list.
+        as a list along with the stemmed versions.
         """
-        important_entities_prompt = self._create_proper_nouns_prompt(text)
+        proper_nouns_prompt = self._create_proper_nouns_prompt(text)
 
         if self.debug:
             print("Important entities prompt:\n")
-            print(important_entities_prompt)
+            print(proper_nouns_prompt)
             print("\n")
 
         json_response = self._generate_response(
-            prompt=important_entities_prompt, json_response=True)
+            prompt=proper_nouns_prompt, json_response=True)
+
+        # Validate the response.
         response_obj = json.loads(json_response)
         assert type(
             response_obj) == dict, f"Expected Response {response_obj} to be type 'dict'"
@@ -103,7 +107,8 @@ class TextAnalyzer:
         proper_nouns_list: List[str] = list(response_obj.values())[0]
         assert type(
             proper_nouns_list) == list, f"Expected Proper nouns to be {proper_nouns_list} to be a list"
-        return proper_nouns_list
+
+        return self.process_proper_nouns(proper_nouns_list)
 
     def generate_answer_to_user_query(self, user_query: str, relevant_text_list: List[str]) -> AnswerFromSectionsResult:
         """
@@ -233,17 +238,22 @@ class TextAnalyzer:
         formatted_text_list.append(prompt)
         return "\n".join(formatted_text_list)
 
+    def process_proper_nouns(self, proper_nouns_list: List[str]) -> List[str]:
+        """
+        Since MongoDB allows mostly comparison operators in search query, we plan to use $in operator
+        when filtering for docs during vector search. To use $in operator, each word in the list must be
+        comparable and processing like [1] splitting into multi word and [2] stemming which are not implemented out of the box
+        unlike in full text search.
+        This method is to perform this processing so sections are searchable with fewer false negatives.
+        Some of the work done here are:
+        1. Split multi-word proper nouns into separate words in the list.
+        2. Stemming each single word.
+        """
+        final_proper_nouns_set = set()
+        for noun in proper_nouns_list:
+            final_proper_nouns_set.add(noun)
+            for word in noun.split():
+                final_proper_nouns_set.add(word)
+                final_proper_nouns_set.add(self.ps.stem(word))
 
-if __name__ == "__main__":
-    text_analyzer = TextAnalyzer(debug=True)
-    text = (
-        'How to Index the Elements of an Array\n\n'
-        'For indexing arrays, Atlas Search requires only the data type of the array elements. '
-        "You don't have to specify that the data is contained in an array ([]) in the index definition."
-        'If you enable dynamic mappings, Atlas Search automatically indexes elements of dynamically indexable data types inside the array.'
-        'To learn more about the data types that Atlas Search dynamically indexes, see Data Types.\n\n'
-        'You can use the Visual Editor or the JSON Editor in the Atlas UI to define the index for elements in arrays.'
-    )
-
-    proper_nouns = text_analyzer.generate_proper_nouns(text)
-    print("got proper nouns: ", proper_nouns)
+        return list(final_proper_nouns_set)
