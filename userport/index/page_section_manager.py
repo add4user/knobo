@@ -96,6 +96,9 @@ class PageSectionManager:
         proper_nouns_in_section: List[str] = self.text_analyzer.generate_proper_nouns(
             section.text)
 
+        # TODO: We may have to transform pronouns to lowercase, capitalize first letter, plurals (LD=1), stemming.
+        # This can probably be done in indexing time.
+
         # Page section for given HTML section.
         page_section = PageSection(text=section.text, prev_sections_context=self.summary_of_sections_so_far, summary=detailed_summary,
                                    summary_vector_embedding=summary_vector_embedding, proper_nouns_in_section=proper_nouns_in_section)

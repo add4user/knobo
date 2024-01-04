@@ -374,22 +374,30 @@ def perform_inference():
             status_code=400, message='Missing query in Chat request')
     user_query = data['user_query']
 
-    print("got user query: ", user_query)
-
     # Run inference.
     if_assistant = InferenceAssistant()
     if_result: InferenceResult = if_assistant.answer(
         user_org_domain=user.org_domain, user_query=user_query)
 
-    print("exception if any: ", if_result.exception)
-    print("Got the following docs")
-    for section in if_result.sections_with_scores:
-        print("\n\n\n")
-        print("section id: ", section.id)
-        print("section summary: ", section.summary[:100])
-        print("section proper nouns in doc: ", section.proper_nouns_in_doc)
-        print("section url: ", section.url)
-        print("section score: ", section.score)
+    if debug:
+        print("exception if any: ", if_result.exception_message)
+        for section in if_result.relevant_sections:
+            print("section text: ", section.text[:50])
+            print("section score: ", section.score)
+            print("\n")
 
-    # Hardcore response for now.
-    return {"text": "Extensions are extra packages that add functionality to a Flask application.", "message_creator_type": "BOT", "created": "test"}, 200
+        print("proper nouns in query")
+        print(if_result.user_query_proper_nouns)
+
+        print("\nFinal answer\n")
+        print(if_result.answer_text)
+
+        print("Latency: " + str(if_result.inference_latency) + " ms")
+
+    if if_result.exception_message:
+        print(if_result.exception_message)
+        raise APIException(
+            status_code=500, message="Internal Server error when fetching chat response")
+
+    # TODO: Construct this response better.
+    return {"text": if_result.answer_text, "message_creator_type": "BOT", "created": "test"}, 200

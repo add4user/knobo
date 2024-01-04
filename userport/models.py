@@ -17,20 +17,16 @@ Collection: AssistantResponseRecords
 
 class VectorSearchSectionResult(BaseModel):
     """
-    Contains result of vector search. It is an embedded model and does
-    not have a collection of its own.
+    Result of vector search with bare minimum fields from SectionModel.
+    It is an embedded model and does not have a collection of its own.
     """
     # ID of the section. To get other fields of the section, we can just
     # do another read during analysis to pull that information.
     id: Optional[PyObjectId] = Field(alias="_id", default=None)
-    # Domain of the org containing this section.
-    org_domain: str = Field(...)
     # URL of the document the section is part of.
     url: str = Field(...)
-    # Detailed summary of given section.
-    summary: str = Field(...)
-    # Proper nouns in the associated document of this section.
-    proper_nouns_in_doc: List[str] = []
+    # Text associated with this section.
+    text: str = Field(...)
     # Document score associated with search query (stored in parent model).
     score: float = Field(...)
 

@@ -18,7 +18,8 @@ class OpenAIManager:
         self.client = OpenAI(
             api_key=os.environ.get("OPENAI_API_KEY"),
         )
-        self.chat_model = os.environ.get("OPENAI_CHAT_MODEL")
+        # self.chat_model = os.environ.get("OPENAI_CHAT_MODEL_GPT35")
+        self.chat_model = os.environ.get("OPENAI_CHAT_MODEL_GPT4")
         self.embedding_model = os.environ.get("OPENAI_EMBEDDING_MODEL")
         self.JSON_RESPONSE_FORMAT = {"type": "json_object"}
 

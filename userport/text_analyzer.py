@@ -1,7 +1,20 @@
 from userport.openai_manager import OpenAIManager
-from typing import List
+from typing import List, Optional
 from tenacity import retry, wait_random, stop_after_attempt
+from dataclasses import dataclass
 import json
+
+
+@dataclass
+class AnswerFromSectionsResult:
+    # Prompt created for user query.
+    prompt: str = ""
+    # True if information answering user query is found in the sections, False otherwise.
+    information_found: bool = False
+    # Chosen section text by Assistant containing the answer (if any).
+    chosen_section_text: str = ""
+    # Final answer text provided by Assistant.
+    answer_text: str = ""
 
 
 class TextAnalyzer:
@@ -14,7 +27,14 @@ class TextAnalyzer:
         self.system_message = "You are a helpful assistant that answers questions in the most truthful manner possible."
         self.json_mode_system_message = self.system_message + \
             " You output results in only JSON."
+        self.no_answer_found_text = "I'm sorry, I don't know the answer to that question."
         self.debug = debug
+
+    def get_no_answer_found_text(self):
+        """
+        Returns no answer for given text message.
+        """
+        return self.no_answer_found_text
 
     def generate_detailed_summary_with_context(self, text: str, preceding_text: str):
         """
@@ -85,6 +105,49 @@ class TextAnalyzer:
             proper_nouns_list) == list, f"Expected Proper nouns to be {proper_nouns_list} to be a list"
         return proper_nouns_list
 
+    def generate_answer_to_user_query(self, user_query: str, relevant_text_list: List[str]) -> AnswerFromSectionsResult:
+        """
+        Generate answer to user query and relevant text list in JSON mode.
+        Returns instance of the AnswerFromSectionsResult class after response validation.
+        """
+        prompt: str = self._create_answer_prompt(
+            user_query=user_query, relevant_text_list=relevant_text_list)
+
+        result = AnswerFromSectionsResult(prompt=prompt)
+
+        json_response = self._generate_response(
+            prompt=prompt, json_response=True)
+        response_dict = json.loads(json_response)
+        assert type(
+            response_dict) == dict, f"Expected Response {response_dict} to be type 'dict' in result: {result}"
+
+        # Validate information_found key.
+        info_found_key = "information_found"
+        assert info_found_key in response_dict, f"Expected key {info_found_key} in response, got {response_dict} in result: {result}"
+        result.information_found = response_dict[info_found_key]
+
+        if not result.information_found:
+            result.answer_text = self.no_answer_found_text
+            return result
+
+        # Validate answer key.
+        answer_key = "answer"
+        assert answer_key in response_dict, f"Expected key {answer_key} in response, for {response_dict} in result: {result}"
+        result.answer_text = response_dict[answer_key]
+
+        # Validate section_number key.
+        section_number_key = "section_number"
+        assert section_number_key in response_dict, f"Expected key {section_number_key} in response, for {response_dict} in result: {result}"
+        assert type(response_dict[section_number_key]
+                    ) == int, f"Expected section number, got {type(response_dict[section_number_key])} for {response_dict} in result: {result}"
+        section_number: int = response_dict[section_number_key]
+        if section_number < 1 or section_number > len(relevant_text_list):
+            raise ValueError(
+                f"Section number not in expected range (1, {len(relevant_text_list)}) for {response_dict} in {result}")
+        result.chosen_section_text = relevant_text_list[section_number-1]
+
+        return result
+
     def _generate_response(self, prompt: str, json_response: bool = False) -> str:
         """
         Helper to generate response from OpenAI.
@@ -145,6 +208,30 @@ class TextAnalyzer:
                 '"""\n\n'
                 'Extract the proper nouns from this text and return the result as an array.'
                 )
+
+    def _create_answer_prompt(self, user_query: str, relevant_text_list: List[str]) -> str:
+        """
+        Helper to create answer from given user query and list of relevant text.
+        """
+        formatted_text_list: List[str] = []
+        for i, relevant_text in enumerate(relevant_text_list):
+            formatted_text = (f'Section {i+1}\n'
+                              '"""\n'
+                              f'{relevant_text}\n'
+                              '"""\n\n')
+            formatted_text_list.append(formatted_text)
+
+        formatted_user_query = ('User query\n'
+                                '"""\n'
+                                f'{user_query}\n'
+                                '""\n\n')
+        formatted_text_list.append(formatted_user_query)
+
+        prompt = ('Answer the User query using only the information in the Sections above.'
+                  ' Return the result as a JSON object with "information_found" as boolean field, "answer" as string field and "section_number" as int field.'
+                  ' The "information_found" field should be set to false if the answer is not contained in the Sections above.')
+        formatted_text_list.append(prompt)
+        return "\n".join(formatted_text_list)
 
 
 if __name__ == "__main__":

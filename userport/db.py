@@ -285,6 +285,23 @@ def vector_search_sections(user_org_domain: str, query_vector_embedding: List[fl
     """
     Performs vector search to retrieve most relevant sections associated with given query.
     """
+
+    # Construct filters for org domain and proper nouns.
+    filters_list: List[Dict] = []
+    filters_list.append({
+        "org_domain": user_org_domain
+    })
+
+    if len(query_proper_nouns) > 0:
+        # For now we are ok if any one of the proper nouns in the list is found
+        # in a doc. Higher false negatives but hopefully the LLM pipeline can
+        # help remove the false negatives.
+        filters_list.append({
+            "proper_nouns_in_doc": {
+                "$in": query_proper_nouns
+            }
+        })
+
     sections = _get_sections()
     pipeline = [
         {
@@ -297,18 +314,7 @@ def vector_search_sections(user_org_domain: str, query_vector_embedding: List[fl
                 "numCandidates": int(min(10000, 20*document_limit)),
                 "limit": document_limit,
                 "filter": {
-                    "$and": [
-                        {
-                            "org_domain": {
-                                "$eq": user_org_domain,
-                            },
-                        },
-                        {
-                            "proper_nouns_in_doc": {
-                                "$in": query_proper_nouns,
-                            }
-                        },
-                    ]
+                    "$and": filters_list
 
                 }
             },
@@ -316,10 +322,8 @@ def vector_search_sections(user_org_domain: str, query_vector_embedding: List[fl
         {
             "$project": {
                 '_id': 1,
-                'org_domain': 1,
                 'url': 1,
-                'summary': 1,
-                'proper_nouns_in_doc': 1,
+                'text': 1,
                 'score': {
                     '$meta': 'vectorSearchScore'
                 }
