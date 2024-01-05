@@ -392,6 +392,10 @@ def perform_inference():
         print("\nFinal answer\n")
         print(if_result.answer_text)
 
+        print("\nFinal section number")
+        print(if_result.chosen_section_text[:50])
+        print("\n")
+
         print("Latency: " + str(if_result.inference_latency) + " ms")
 
     if if_result.exception_message:

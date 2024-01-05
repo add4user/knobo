@@ -68,12 +68,17 @@ class InferenceAssistant:
             # TODO: We may need to tag the question type (e.g. definition, information, how-to, feedback, troubleshooting etc.).
             # This will help formulate answers better.
 
+            # We might want to store topic context whenever proper nouns are not detected in the current query.
+            # This way we can apply the previous proper nouns to fitler and provide a better response. The topic context
+            # will change whenever new proper nouns are found in the question or maybe we combine the previous proper noun
+            # with current proper nouns if there are any pronouns in the question.
+
             # Fetch embedding for user query.
             user_query_vector_embedding: List[float] = self.text_analyzer.generate_vector_embedding(
                 text=user_query)
             if_result.user_query_vector_embedding = user_query_vector_embedding
 
-            print("\nEmbedding and pronoun latency time: ",
+            print("\nEmbedding and proper nouns latency time: ",
                   self.latency_in_ms(start_time), " ms")
 
             # Perform vector search to find relevant sections.
