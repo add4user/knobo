@@ -56,7 +56,7 @@ export class ChatService extends EventTarget {
     this.chatMessages.push({
       text: user_query,
       message_creator_type: "HUMAN",
-      created: null,
+      created: "Now",
     });
     this.dispatch_start_event();
     return fetch(endpoint_url, {
@@ -74,8 +74,6 @@ export class ChatService extends EventTarget {
         })
       )
       .then((data) => {
-        // TODO: This is manual for now. Replace with server event.
-        this.chatMessages[this.chatMessages.length - 1].created = "Test";
         // TODO: Add error code check and validate message before adding to message list.
         this.chatMessages.push(data);
 

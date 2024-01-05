@@ -43,12 +43,12 @@ export class LoggedInBaseView {
 
     this.chatService.addEventListener(
       "userport_post_message_start",
-      this.renderChatMessages.bind(this)
+      this.handleMessagePostStart.bind(this)
     );
 
     this.chatService.addEventListener(
       "userport_post_message_end",
-      this.renderChatMessages.bind(this)
+      this.handleMessagePostEnd.bind(this)
     );
   }
 
@@ -83,15 +83,33 @@ export class LoggedInBaseView {
   }
 
   /**
+   * Update view when message posted has started.
+   */
+  handleMessagePostStart() {
+    this.renderChatMessages(true);
+  }
+
+  /**
+   * Update view when message posted has completed.
+   */
+  handleMessagePostEnd() {
+    this.renderChatMessages(false);
+  }
+
+  /**
    * Renders all chat messages in the view.
    */
-  renderChatMessages() {
+  renderChatMessages(messagePostStart) {
     const chatMessages = this.chatService.getChatMessages();
     var chatMessagesNodeList = [];
     for (let i = 0; i < chatMessages.length; i++) {
       const chatMessage = chatMessages[i];
       const li = this.createChatMessage(chatMessage);
       chatMessagesNodeList.push(li);
+    }
+    if (messagePostStart) {
+      // Add typing indicator to show user response is pending.
+      chatMessagesNodeList.push(this.createTypingIndicator());
     }
     this.chatMessagesList.replaceChildren(...chatMessagesNodeList);
   }
@@ -128,8 +146,7 @@ export class LoggedInBaseView {
 
     let pFooter = document.createElement("p");
     pFooter.classList.add("userport-common-message-footer");
-    pFooter.innerText =
-      chatMessage.created === null ? "Sending" : "Sent at 8:20 pm";
+    pFooter.innerText = chatMessage.created;
     li.appendChild(pFooter);
 
     return li;
@@ -140,5 +157,18 @@ export class LoggedInBaseView {
    */
   clearChatTextArea() {
     this.chatMessageTextArea.value = "";
+  }
+
+  /**
+   * Create and return typing indicator HTML Element.
+   */
+  createTypingIndicator() {
+    let div = document.createElement("div");
+    div.classList.add("userport-typing-indicator");
+    for (let i = 0; i < 3; i++) {
+      let span = document.createElement("span");
+      div.appendChild(span);
+    }
+    return div;
   }
 }

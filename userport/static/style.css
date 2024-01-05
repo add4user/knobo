@@ -679,3 +679,84 @@ body {
 .userport-hidden {
   display: none;
 }
+
+/* START: Userport Chat Typing indicator. */
+
+.userport-typing-indicator {
+  background-color: #e6e7ed;
+  width: auto;
+  border-radius: 20px;
+  padding: 10px;
+  display: table;
+  margin: 3% 6%;
+  position: relative;
+  -webkit-animation: 2s userport-bulge infinite ease-out;
+  animation: 2s userport-bulge infinite ease-out;
+}
+
+/* The tail in the typing indicator */
+.userport-typing-indicator:before,
+.userport-typing-indicator:after {
+  content: "";
+  position: absolute;
+  bottom: -2px;
+  left: -2px;
+  height: 10px;
+  width: 10px;
+  border-radius: 50%;
+  background-color: #e6e7ed;
+}
+.userport-typing-indicator:after {
+  height: 5px;
+  width: 5px;
+  left: -10px;
+  bottom: -30px;
+}
+.userport-typing-indicator span {
+  height: 8px;
+  width: 8px;
+  float: left;
+  margin: 0 1px;
+  background-color: #9e9ea1;
+  display: block;
+  border-radius: 50%;
+  opacity: 0.4;
+}
+.userport-typing-indicator span:nth-of-type(1) {
+  -webkit-animation: 1s userport-blink infinite 0.3333s;
+  animation: 1s userport-blink infinite 0.3333s;
+}
+.userport-typing-indicator span:nth-of-type(2) {
+  -webkit-animation: 1s userport-blink infinite 0.6666s;
+  animation: 1s userport-blink infinite 0.6666s;
+}
+.userport-typing-indicator span:nth-of-type(3) {
+  -webkit-animation: 1s userport-blink infinite 0.9999s;
+  animation: 1s userport-blink infinite 0.9999s;
+}
+
+@-webkit-keyframes userport-blink {
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes userport-blink {
+  50% {
+    opacity: 1;
+  }
+}
+@-webkit-keyframes userport-bulge {
+  50% {
+    -webkit-transform: scale(1.05);
+    transform: scale(1.05);
+  }
+}
+@keyframes userport-bulge {
+  50% {
+    -webkit-transform: scale(1.05);
+    transform: scale(1.05);
+  }
+}
+
+/* END: Userport Chat Typing indicator. */

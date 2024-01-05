@@ -404,4 +404,4 @@ def perform_inference():
             status_code=500, message="Internal Server error when fetching chat response")
 
     # TODO: Construct this response better.
-    return {"text": if_result.answer_text, "message_creator_type": "BOT", "created": "test"}, 200
+    return {"text": if_result.answer_text, "message_creator_type": "BOT", "created": "Sent at 8:20pm"}, 200
