@@ -1,7 +1,16 @@
 from flask import Blueprint, render_template, request, session, jsonify
 from flask_login import login_required
 from userport.index import PageSection, PageSectionManager
-from userport.models import UploadStatus, UploadModel, UserModel, APIKeyModel
+from userport.models import (
+    UploadStatus,
+    UploadModel,
+    UserModel,
+    APIKeyModel,
+    InferenceResultModel,
+    UserFeedback,
+    ChatMessageModel,
+    MessageCreatorType
+)
 from userport.inference_assistant import InferenceAssistant, InferenceResult
 from userport.utils import generate_hash
 from typing import List
@@ -18,6 +27,8 @@ from userport.db import (
     get_api_key_for_domain,
     get_api_key_from_hashed_value,
     delete_api_key_for_domain,
+    create_inference_result,
+    write_inference_and_chat_messages_transactioanlly,
     NotFoundException
 )
 from celery import shared_task
@@ -340,6 +351,7 @@ def perform_inference():
         print(e)
         raise APIException(
             status_code=500, message=f'User with id {user_id} does not exist')
+    org_domain: str = user.org_domain
 
     if 'X-API-KEY' not in request.headers:
         raise APIException(
@@ -350,9 +362,9 @@ def perform_inference():
     try:
         api_key_model: APIKeyModel = get_api_key_from_hashed_value(
             hashed_key_value=generate_hash(api_key))
-        if api_key_model.org_domain != user.org_domain:
+        if api_key_model.org_domain != org_domain:
             raise NotFoundException(
-                f'User org {user.org_domain} does not match API key org: {api_key_model.org_domain}')
+                f'User org {org_domain} does not match API key org: {api_key_model.org_domain}')
     except NotFoundException as e:
         print(e)
         raise APIException(
@@ -377,7 +389,7 @@ def perform_inference():
     # Run inference.
     if_assistant = InferenceAssistant()
     if_result: InferenceResult = if_assistant.answer(
-        user_org_domain=user.org_domain, user_query=user_query)
+        user_org_domain=org_domain, user_query=user_query)
 
     if debug:
         print("exception if any: ", if_result.exception_message)
@@ -398,10 +410,49 @@ def perform_inference():
 
         print("Latency: " + str(if_result.inference_latency) + " ms")
 
+    # Create model to write to db.
+    if_result_model = InferenceResultModel(
+        org_domain=org_domain,
+        user_query=if_result.user_query,
+        user_query_vector_embedding=if_result.user_query_vector_embedding,
+        user_query_proper_nouns=if_result.user_query_proper_nouns,
+        document_limit=if_result.document_limit,
+        relevant_sections=if_result.relevant_sections,
+        final_text_prompt=if_result.final_text_prompt,
+        information_found=if_result.information_found,
+        chosen_section_text=if_result.chosen_section_text,
+        answer_text=if_result.answer_text,
+        user_feedback=UserFeedback(),
+        inference_latency=if_result.inference_latency,
+        exception_message=if_result.exception_message,
+    )
+
     if if_result.exception_message:
+        # Inference failed, store the inference result in db and throw an exception.
         print(if_result.exception_message)
+        try:
+            create_inference_result(if_result_model)
+        except Exception as e:
+            print(e)
         raise APIException(
             status_code=500, message="Internal Server error when fetching chat response")
 
-    # TODO: Construct this response better.
-    return {"text": if_result.answer_text, "message_creator_type": "BOT", "created": "Sent at 8:20pm"}, 200
+    # Create ChatMessage models to write to db.
+    chat_message_user_model = ChatMessageModel(
+        org_domain=org_domain, human_user_id=user_id, text=user_query,
+        creator_id=user_id, creator_type=MessageCreatorType.HUMAN
+    )
+    chat_message_bot_model = ChatMessageModel(
+        org_domain=org_domain, human_user_id=user_id, text=if_result.answer_text,
+        creator_id=if_result.bot_id, creator_type=MessageCreatorType.BOT
+    )
+
+    try:
+        write_inference_and_chat_messages_transactioanlly(if_result_model=if_result_model,
+                                                          chat_message_user_model=chat_message_user_model, chat_message_bot_model=chat_message_bot_model)
+    except Exception as e:
+        print(e)
+        raise APIException(
+            status_code=500, message="Failed to write Chat message")
+
+    return chat_message_bot_model.model_dump(), 200

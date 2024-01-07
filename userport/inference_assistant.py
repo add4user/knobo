@@ -11,10 +11,10 @@ class InferenceResult:
     """
     Contains response of inference performed by Assistant.
     """
+    # Bot ID that creates the inference result.
+    bot_id: str = ""
     # User query.
     user_query: str = ""
-    # Context associated with user query.
-    user_query_context: List[str] = field(default_factory=list)
     # Vector Embedding associated with user query.
     user_query_vector_embedding: List[float] = field(default_factory=list)
     # Proper nouns found in user query.
@@ -37,7 +37,7 @@ class InferenceResult:
     # Inference latency in ms.
     inference_latency: int = 0
     # Exception (if any) encountered during inference.
-    exception_message: str = ""
+    exception_message: str = None
 
 
 class InferenceAssistant:
@@ -50,14 +50,14 @@ class InferenceAssistant:
         self.text_analyzer = TextAnalyzer()
         # Number of documents to return in vector search.
         self.document_limit = 5
+        self.bot_id = "bot_v1"
 
-    def answer(self, user_org_domain: str, user_query: str, user_query_context: List[str] = []) -> InferenceResult:
+    def answer(self, user_org_domain: str, user_query: str) -> InferenceResult:
         """
         Understand given user query and context and provides an inference response.
         """
 
-        if_result = InferenceResult(
-            user_query=user_query, user_query_context=user_query_context)
+        if_result = InferenceResult(bot_id=self.bot_id, user_query=user_query)
         start_time = time.time()
         try:
             # Fetch pronouns from given query text.

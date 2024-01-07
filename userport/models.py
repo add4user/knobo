@@ -11,8 +11,22 @@ from enum import Enum
 PyObjectId = Annotated[str, BeforeValidator(str)]
 
 """
-Collection: AssistantResponseRecords
+Collection: InferenceResults
 """
+
+
+class FeedbackType(str, Enum):
+    LIKED = "LIKED"
+    DISLIKED = "DISLIKED"
+    NONE = "NONE"
+
+
+class UserFeedback(BaseModel):
+    """
+    Represents feedback from user about chat response from bot.
+    """
+    liked: FeedbackType = Field(default=FeedbackType.NONE)
+    text: str = Field(default="")
 
 
 class VectorSearchSectionResult(BaseModel):
@@ -31,38 +45,44 @@ class VectorSearchSectionResult(BaseModel):
     score: float = Field(...)
 
 
-class AssistantInferenceModel(BaseModel):
+class InferenceResultModel(BaseModel):
     """
-    Represents the response by an assistant to a user query. Used for
-    analytics and measurement purposes.
-    TODO: Complete this model.
+    Represents the details of the response by an assistant to a user query.
+    Can be used for analytics purposes.
     """
     id: Optional[PyObjectId] = Field(alias="_id", default=None)
-    # User query.
-
-    # User query embedding.
-
-    # User query context.
-
-    # Text response of the assistant.
-
-    # Proper nouns detected from user query and context.
-
-    # Final Sections returned from vector search.
-
-    # Section chosen by LLM as response.
-
-    # Feedback provided by user (if any) for this response.
-
-    # Latency of response generation in ms.
-
-    # Exception (if any) that the inference ran into.
-
+    # Chat Message ID associated with this inference.
+    # Value is None if the inference failed with an exception.
+    chat_message_id: str = Field(default=None)
     # Org domain.
-
-    # ID of user with which the conversation is happening.
-
+    org_domain: str = Field(...)
+    # User query.
+    user_query: str = Field(...)
+    # User query vector embedding.
+    user_query_vector_embedding: List[float] = []
+    # Proper nouns found in user query.
+    user_query_proper_nouns: List[str] = []
+    # Document limit set for vector search.
+    document_limit: int = 0
+    # Relevant Sections returned by vector search.
+    relevant_sections: List[VectorSearchSectionResult] = []
+    # Final Text prompt to generate answer. Set only if answer is generated.
+    final_text_prompt: str = Field(default="")
+    # True if information answering user query is found in the sections.
+    information_found: bool = Field(default=False)
+    # Chosen section text by Assistant containing the answer (if any).
+    # If empty, it means no section was chosen.
+    chosen_section_text: str = Field(default="")
+    # Text answer provided by the assistant. Set only if answer is generated.
+    answer_text: str = Field(default="")
+    # Feedback provided by user (if any) for this response.
+    user_feedback: UserFeedback = Field(...)
+    # Inference latency in ms.
+    inference_latency: int = 0
+    # Exception (if any) encountered during inference.
+    exception_message: Optional[str] = None
     # Created time.
+    created: Optional[datetime] = None
 
 
 """
@@ -75,35 +95,24 @@ class MessageCreatorType(str, Enum):
     BOT = "BOT"
 
 
-class FeedbackModel(BaseModel):
-    """
-    Represents feedback from user about chat response from bot.
-    """
-    liked: Optional[bool] = None
-    text: str = Field(default="")
-
-
 class ChatMessageModel(BaseModel):
     """
     Represents a chat conversation message between Bot and a user.
     """
     id: Optional[PyObjectId] = Field(alias="_id", default=None)
-    # Domain of the org in which the conversation is taking place should be globally unique.
+    # Domain of the org in which the conversation is taking place.
     org_domain: str = Field(...)
     # ID of the end human user that the conversation is with.
     human_user_id: str = Field(...)
-    # Time when this message was created.
-    created: Optional[datetime] = None
     # Text associated with the message.
     text: str = Field(...)
-    # Any feedback associated with the message. Should be empty for HUMAN messages.
-    feedback: Optional[FeedbackModel] = Field(default=None)
-    # Type of the Message creator (HUMAN or BOT).
-    message_creator_type: MessageCreatorType = Field(...)
     # Message creator ID. Applies to both HUMAN and BOT.
-    message_creator_id: str = Field(...)
-    # Time when this message was updated (probably when feedback is provided).
-    updated: Optional[datetime] = None
+    # Bot ID will change with version changes.
+    creator_id: str = Field(...)
+    # Type of the Message creator (HUMAN or BOT).
+    creator_type: MessageCreatorType = Field(...)
+    # Time when this message was created.
+    created: Optional[datetime] = None
 
 
 class UploadStatus(str, Enum):

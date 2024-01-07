@@ -9,7 +9,10 @@ from userport.models import (
     UploadModel,
     UploadStatus,
     APIKeyModel,
-    VectorSearchSectionResult
+    VectorSearchSectionResult,
+    InferenceResultModel,
+    ChatMessageModel,
+    MessageCreatorType
 )
 from datetime import datetime, timezone
 from bson.objectid import ObjectId
@@ -82,6 +85,22 @@ def _get_api_keys() -> Collection:
     helper to fetch the collection.
     """
     return _get_db()['api_keys']
+
+
+def _get_inference_results() -> Collection:
+    """
+    Returns Inference Results collection from database. All internal methods in this module should use this 
+    helper to fetch the collection.
+    """
+    return _get_db()['inference_results']
+
+
+def _get_chat_messages() -> Collection:
+    """
+    Returns Chat Messages collection from database. All internal methods in this module should use this 
+    helper to fetch the collection.
+    """
+    return _get_db()['chat_messages']
 
 
 def get_upload_by_id(upload_id: str) -> UploadModel:
@@ -364,3 +383,40 @@ def delete_api_key_for_domain(org_domain: str) -> APIKeyModel:
     if result.deleted_count != 1:
         raise NotFoundException(
             f"Expected 1 API key to be deleted, got {result.deleted_count} deleted")
+
+
+def create_inference_result(if_result_model: InferenceResultModel):
+    """
+    Creates inference result in the database.
+    """
+    if_result_model.created = _get_current_time()
+    inference_results = _get_inference_results()
+    inference_results.insert_one(if_result_model.model_dump(exclude=['id']))
+
+
+def write_inference_and_chat_messages_transactioanlly(if_result_model: InferenceResultModel,
+                                                      chat_message_user_model: ChatMessageModel, chat_message_bot_model: ChatMessageModel):
+    """
+    Write Inference Result and Chat Messages Transacationally.
+    """
+    assert chat_message_user_model.creator_type == MessageCreatorType.HUMAN, f"Expected Human creator type in {chat_message_user_model} model"
+    assert chat_message_bot_model.creator_type == MessageCreatorType.BOT, f"Expected Bot creator type in {chat_message_bot_model} model"
+    client = _get_mongo_client()
+    inference_results = _get_inference_results()
+    chat_messages = _get_chat_messages()
+
+    created_time = _get_current_time()
+    if_result_model.created = created_time
+    chat_message_user_model.created = created_time
+    chat_message_bot_model.created = created_time
+    with client.start_session() as session:
+        with session.start_transaction():
+            chat_messages.insert_one(
+                chat_message_user_model.model_dump(exclude=['id']))
+            bot_message_result = chat_messages.insert_one(
+                chat_message_bot_model.model_dump(exclude=['id']))
+
+            if_result_model.chat_message_id = str(
+                bot_message_result.inserted_id)
+            inference_results.insert_one(
+                if_result_model.model_dump(exclude=['id']))
