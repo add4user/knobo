@@ -91,6 +91,9 @@ class InferenceAssistant:
 
             if len(relevant_sections) > 0:
                 # Generate final answer using text from relevant sections.
+                # TODO: It's possible that the answer of the question could be one of multiple choices depending on
+                # more information provided by the user. In such a case we want the AI to provide those options and
+                # use the subsequent response for figuring out what needs to be done.
                 final_answer_start_time = time.time()
                 relevant_text_list: List[str] = [
                     section.text for section in relevant_sections]
