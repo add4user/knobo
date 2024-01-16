@@ -71,6 +71,8 @@ export class ChatWidgetView {
    * Renders all chat messages in the view.
    */
   renderChatMessages(messagePostStart) {
+    // TODO: We should add a try again button in the chat whenever I don't know answer is received.
+
     const chatMessages = this.chatService.getChatMessages();
     var chatMessagesNodeList = [];
     for (let i = 0; i < chatMessages.length; i++) {
