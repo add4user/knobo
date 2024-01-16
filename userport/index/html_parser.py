@@ -187,17 +187,25 @@ class CustomHTMLParser(HTMLParser):
                 # Remove this heading since current heading is larger (in format).
                 self.active_heading_nodes.pop()
 
+        if current_tag.startswith('h'):
+            # There no parent heading node for this tag so return None (it will become a heading node itself).
+            return None
+
         raise ValueError(
             f'Error! Could not find parent heading section for {current_tag}')
 
     @staticmethod
     def is_end_of_content(tag, attrs) -> bool:
         """
-        footer in tag or attrs signals end of parsing main content.
+        There are few ways we detect end of content. If any of these conditions
+        is met, we end parsing:
+        [1] footer as tag or within tag attributes signals end of parsing main content.
+        [2] script tag encountered after parsing is started i.e. script tag in body indicates no more content to follow usually.
         TODO: Come up with better algorithm in the future.
         """
         footer_keyword = 'footer'
-        if tag == footer_keyword:
+        script_keyword = 'script'
+        if tag == footer_keyword or tag == script_keyword:
             return True
         for attr in attrs:
             attr_key, values = attr
@@ -261,15 +269,21 @@ if __name__ == "__main__":
     # url = 'https://flask.palletsprojects.com/en/3.0.x/quickstart/'
     # url = 'https://support.atlassian.com/jira-software-cloud/docs/what-are-team-managed-and-company-managed-projects/'
     # url = 'https://support.atlassian.com/jira-software-cloud/docs/search-for-issues-in-a-project/'
-    url = 'https://support.atlassian.com/jira-software-cloud/docs/navigate-to-your-work/'
+    # url = 'https://support.atlassian.com/jira-software-cloud/docs/navigate-to-your-work/'
+    url = 'https://add4user.github.io/userport/'
     html_page = fetch_html_page(url)
     root_section = parse_html(html_page=html_page, page_url=url)
+    num_sections = 0
     q = Queue()
     for csection in root_section.child_sections:
         q.put(csection)
+        num_sections += 1
     while not q.empty():
         sec: HTMLSection = q.get()
         print(sec.text)
         print("\n\n-------------------------------\n\n")
         for csec in sec.child_sections:
             q.put(csec)
+            num_sections += 1
+
+    print("num sections: ", num_sections)

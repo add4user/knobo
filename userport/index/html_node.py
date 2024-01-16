@@ -115,13 +115,13 @@ def convert_to_sections(root_node: HTMLNode, max_depth: int = 1) -> HTMLSection:
     q = Queue()
     root_section = HTMLSection(text=HTMLSection.ROOT_TEXT)
     for cnode in root_node.child_nodes:
-        q.put((cnode, root_section))
+        q.put((cnode, root_section, 1))
 
-    current_depth = 1
     while not q.empty():
         qVal = q.get()
         node: HTMLNode = qVal[0]
         parent_section: HTMLSection = qVal[1]
+        current_depth = qVal[2]
 
         max_depth_exceeded = True if current_depth > max_depth else False
         child_heading_nodes: List[HTMLNode] = []
@@ -148,7 +148,7 @@ def convert_to_sections(root_node: HTMLNode, max_depth: int = 1) -> HTMLSection:
         if not max_depth_exceeded:
             # BFS on child nodes.
             for child_heading_node in child_heading_nodes:
-                q.put((child_heading_node, html_section))
+                q.put((child_heading_node, html_section, current_depth+1))
 
             current_depth += 1
 

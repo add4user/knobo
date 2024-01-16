@@ -37,7 +37,7 @@ import secrets
 bp = Blueprint('application', __name__)
 
 # Set to false when not debugging.
-debug = True
+debug = False
 
 
 class APIException(Exception):

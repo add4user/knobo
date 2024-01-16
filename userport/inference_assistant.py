@@ -47,7 +47,7 @@ class InferenceAssistant:
     """
 
     def __init__(self) -> None:
-        self.text_analyzer = TextAnalyzer()
+        self.text_analyzer = TextAnalyzer(inference=True)
         # Number of documents to return in vector search.
         self.document_limit = 5
         self.bot_id = "bot_v1"

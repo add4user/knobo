@@ -83,11 +83,6 @@ class PageSectionManager:
             text_so_far = "\n\n".join(
                 [self.summary_of_sections_so_far, section.text])
 
-        # Compute new concise summary of sections so far.
-        # Concise so that detailed summary of subsequent sections doesn't exceed token limit.
-        self.summary_of_sections_so_far = self.text_analyzer.generate_concise_summary(
-            text_so_far)
-
         # Compute embedding of detailed summary.
         summary_vector_embedding: List[float] = self.text_analyzer.generate_vector_embedding(
             detailed_summary)
@@ -102,6 +97,11 @@ class PageSectionManager:
         # Page section for given HTML section.
         page_section = PageSection(text=section.text, prev_sections_context=self.summary_of_sections_so_far, summary=detailed_summary,
                                    summary_vector_embedding=summary_vector_embedding, proper_nouns_in_section=proper_nouns_in_section)
+
+        # Compute new concise summary of sections so far.
+        # Concise so that detailed summary of subsequent sections doesn't exceed token limit.
+        self.summary_of_sections_so_far = self.text_analyzer.generate_concise_summary(
+            text_so_far)
 
         for child_section in section.child_sections:
             child_page_section = self._generate_metadata(child_section)

@@ -23,10 +23,13 @@ class TextAnalyzer:
     Contains helpers to summarize text, generate embeddings and generate proper nouns.
     """
 
-    def __init__(self, debug=False) -> None:
+    def __init__(self, debug=False, inference: bool = False) -> None:
         self.openai_manager = OpenAIManager()
         self.ps = PorterStemmer()
-        self.system_message = "You are a helpful assistant that answers questions in the most truthful manner possible."
+        if not inference:
+            self.system_message = "You are a helpful assistant that answers questions in the most truthful manner possible."
+        else:
+            self.system_message = "You are a helpful assistant that answers questions in the most truthful manner possible. You also provide concise answers so that users can easily comprehend the answer and then ask follow ups if required. "
         self.json_mode_system_message = self.system_message + \
             " You output results in only JSON."
         self.no_answer_found_text = "I'm sorry, I don't know the answer to that question."

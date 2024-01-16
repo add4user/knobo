@@ -168,7 +168,7 @@ class SectionModel(BaseModel):
     text: str = Field(default="")
     # Detailed summary of given section.
     summary: str = Field(default="")
-    # Context from preceding sections used to generate summary of section text
+    # Context from preceding sections used to generate summary of section text.
     prev_sections_context: str = Field(default="")
     # Vector Embedding of the detailed summary.
     summary_vector_embedding: List[float] = []
