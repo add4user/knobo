@@ -470,10 +470,10 @@ body {
 
 /* Widget Styles, will be moved to separate file after testing. */
 
-/* Global variables for the widget */
+/* Global variables for the widget. Change values as needed depending on view. */
 :root {
   /* Width of the chat widget. */
-  --userport-widget-width: 350px;
+  --userport-widget-width: 1000px;
   /* z-index of the widget and button. */
   --userport-z-index: 5;
   /* border width for the widget */
@@ -481,19 +481,19 @@ body {
   /* Border radius for the widget. */
   --userport-border-radius: 10px;
   /* Distance of the widget from right side of page. */
-  --userport-widget-right-position: 50px;
+  --userport-widget-right-position: 100px;
   /* Distance of the widget button from the bottom of the page. */
-  --userport-widget-button-bottom-position: 50px;
+  --userport-widget-button-bottom-position: -600px;
   /* Height of the widget button. */
   --userport-widget-button-height: 40px;
   /* Percent height of chat header. */
   --userport-chat-header-height-percent: 8%;
   /* Percent height of the chat messages container. */
-  --userport-chat-messages-height-percent: 77%;
+  --userport-chat-messages-height-percent: 82%;
   /* Percent width of the query input. */
-  --userport-chat-query-input-width-percent: 85%;
+  --userport-chat-query-input-width-percent: 90%;
   /* Percent height of powered by userport footer. */
-  --userport-powered-by-footer-height-percent: 5%;
+  --userport-powered-by-footer-height-percent: 0%;
   /* Background Color of header and footer of chat message. */
   --userport-chat-header-footer-background-color: #6457bc;
   /* Chat Message header and footer font size */

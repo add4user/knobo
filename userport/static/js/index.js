@@ -1,6 +1,7 @@
 import { LoggedInBaseView } from "./logged_in_base.js";
 import { UploadURL } from "./upload_url.js";
 import { APIKeyView } from "./api_key_view.js";
+import { ChatWidgetView } from "./chat_widget_view.js";
 
 function main() {
   /**
@@ -18,6 +19,10 @@ function main() {
     case "/":
       new LoggedInBaseView();
       new UploadURL();
+      break;
+    case "/chat":
+      new LoggedInBaseView();
+      new ChatWidgetView();
       break;
     case "/api-key":
       new LoggedInBaseView();

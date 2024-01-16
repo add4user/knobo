@@ -456,3 +456,12 @@ def perform_inference():
             status_code=500, message="Failed to write Chat message")
 
     return chat_message_bot_model.model_dump(), 200
+
+
+@bp.route('/chat', methods=['GET'])
+@login_required
+def chat_view():
+    """
+    View to show chat with bot.
+    """
+    return render_template('application/chat.html')

@@ -1,0 +1,21 @@
+{% extends 'application/logged_in_base.html' %} {% block main_content %}
+<input type="hidden" id="api-key-csrf-token" value="{{ csrf_token() }}" />
+<div id="userport-widget-container">
+    <div id="userport-chat-container">
+        <div id="userport-chat-header">
+          <p>Learn by asking!</p>
+        </div>
+        <div id="userport-chat-messages-container">
+          <ul id="userport-chat-messages-list"></ul>
+        </div>
+        <div id="userport-input-container">
+            <textarea id="userport-query-textarea" placeholder="Enter your query here!"></textarea>
+            <button id="userport-query-btn">&#9654</button>
+        </div>
+        <div id="userport-powered-by-footer">
+            <p>Powered by Userport</p>
+        </div>
+    </div>
+    <button id="userport-widget-btn" class="userport-hidden">Ask AI</button>
+  </div>
+{% endblock %}

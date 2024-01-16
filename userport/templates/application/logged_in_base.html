@@ -10,64 +10,22 @@
   <div id="left-nav">
     <ul>
       <li>
-        <h5><a href="/">Uploads</a></h4>
+        <h5><a href="/">Uploads</a></h5>
       </li>
       <li>
-        <h5><a href="/api-key">API Key</a></h5>
+        <h5><a href="/chat">Chat</a></h5>
       </li>
       <li>
         <h5><a href="/dashboard">Dashboard</a></h5>
+      </li>
+      <li>
+        <h5><a href="/api-key">API Key</a></h5>
       </li>
       <li>
         <h5><a href="/billing">Billing</a></h5>
       </li>
     </ul>
   </div>
-  <div id="main-content">
-    {% block main_content %}{% endblock %}
-  </div>
-  <div id="userport-widget-container">
-    <div id="userport-chat-container" class="userport-hidden">
-        <div id="userport-chat-header">
-          <p>Get help with the product!</p>
-        </div>
-        <div id="userport-chat-messages-container">
-          <ul id="userport-chat-messages-list">
-            <!-- <li class="userport-message-common-container userport-bot-container">
-              <p class="userport-message-common-header">AI</p>
-              <p class="userport-common-message userport-bot-message">The page contains both child and parent issues. You need to ensure both are connected before deleting them. Did that help answer your question?</p>
-              <p class="userport-common-message-footer">2:34pm</p>
-            </li>
-            <li class="userport-message-common-container userport-human-container">
-              <p class="userport-message-common-header">You</p>
-              <p class="userport-common-message userport-human-message">
-                Yes that worked! Thanks for explaining things in detail!
-              </p>
-              <p class="userport-common-message-footer">2:34pm</p>
-            </li>
-            <li class="userport-message-common-container userport-bot-container">
-              <p class="userport-message-common-header">AI</p>
-              <p class="userport-common-message userport-bot-message">Is there anything else I can help you with?</p>
-              <p class="userport-common-message-footer">2:34pm</p>
-            </li>
-            <li class="userport-message-common-container userport-human-container">
-              <p class="userport-message-common-header">You</p>
-              <p class="userport-common-message userport-human-message">
-                I need to know how to create a workflow. Can you explain how?
-              </p>
-              <p class="userport-common-message-footer">2:34pm</p>
-            </li> -->
-          </ul>
-        </div>
-        <div id="userport-input-container">
-            <textarea id="userport-query-textarea" placeholder="Enter your query here!"></textarea>
-            <button id="userport-query-btn">&#9654</button>
-        </div>
-        <div id="userport-powered-by-footer">
-            <p>Powered by Userport</p>
-        </div>
-    </div>
-    <button id="userport-widget-btn">Ask AI</button>
-  </div>
+  <div id="main-content">{% block main_content %}{% endblock %}</div>
 </div>
 {% endblock %}
