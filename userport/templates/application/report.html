@@ -1,0 +1,122 @@
+{% extends 'application/logged_in_base.html' %} {% block main_content %}
+<div id="report">
+  <table id="query-table">
+    <thead>
+      <tr>
+        <th class="date-column">Date</th>
+        <th class="user-column">User</th>
+        <th class="query-column">Query</th>
+        <th class="answer-column">Answer</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="date-column">16-01-2024</td>
+        <td class="user-column">addarsh@userport.ai</td>
+        <td class="user-column answer-not-found">
+          Are Slack DMs created using the asynchronous flow as well?
+        </td>
+        <td class="answer-column">
+          I'm sorry, I don't know the answer to that question.
+        </td>
+      </tr>
+      <tr>
+        <td class="date-column">16-01-2024</td>
+        <td class="user-column">addarsh@userport.ai</td>
+        <td class="user-column">
+          How does Slack channel creation differ from thread creation?
+        </td>
+        <td class="answer-column">
+          On the backend, the fundamental process for creating both Slack
+          channels and threads is largely the same, with a few differences in
+          the flow for different types of requests. Both channels and threads
+          creation involve an RPC call to create a Membership entity and
+          requested memberships, followed by an RPC call to the Slack Storage
+          Service. The key difference lies in the type of flow used: synchronous
+          or asynchronous. Synchronous flow, used for creating Discoverable
+          channels, has higher latency and involves waiting for each process to
+          complete before moving to the next step. Asynchronous flow, used for
+          creating Restricted channels and any Thread, lower latency since it
+          does not wait for the Membership entity to be fully created before
+          returning and is thus less latency-intensive.
+        </td>
+      </tr>
+      <tr>
+        <td class="date-column">16-01-2024</td>
+        <td class="user-column">addarsh@userport.ai</td>
+        <td class="user-column">
+          Are Slack channels and threads created using the same flow in the
+          backend?
+        </td>
+        <td class="answer-column">
+          Yes, Slack channels and threads are created using largely the same
+          flow in the backend, with only a few differences.
+        </td>
+      </tr>
+      <tr>
+        <td class="date-column">16-01-2024</td>
+        <td class="user-column">addarsh@userport.ai</td>
+        <td class="user-column">What is a Slack Channel?</td>
+        <td class="answer-column">
+          A Slack Channel organizes conversations into dedicated spaces.
+          Channels can be created for any project, topic, or team which helps in
+          sharing ideas, making decisions, and moving work forward with the
+          right people and information in one place.
+        </td>
+      </tr>
+      <tr>
+        <td class="date-column">06-01-2024</td>
+        <td class="user-column">addarsh@userport.ai</td>
+        <td class="user-column answer-not-found">What is a Slack DM?</td>
+        <td class="answer-column">
+          I'm sorry, I don't know the answer to that question.
+        </td>
+      </tr>
+      <tr>
+        <td class="date-column">04-01-2024</td>
+        <td class="user-column">peter@userport.ai</td>
+        <td class="user-column">
+          What is the latency of the synchronous channel creation flow?
+        </td>
+        <td class="answer-column">
+          The latency of the synchronous flow is around 1.8s at 50 percentile
+          and 2.4s at 99 percentile.
+        </td>
+      </tr>
+      <tr>
+        <td class="date-column">02-01-2024</td>
+        <td class="user-column">qi@userport.ai</td>
+        <td class="user-column answer-not-found">How are Slack DMs created?</td>
+        <td class="answer-column">
+          I'm sorry, I don't know the answer to that question.
+        </td>
+      </tr>
+      <tr>
+        <td class="date-column">01-01-2024</td>
+        <td class="user-column">peter@userport.ai</td>
+        <td class="user-column">
+          What is the latency of Slack thread creation?
+        </td>
+        <td class="answer-column">
+          The overall latency of Slack thread creation when using the
+          asynchronous flow is around 0.9s at 50 percentile and 1.4s at 99
+          percentile.
+        </td>
+      </tr>
+      <tr>
+        <td class="date-column">01-01-2024</td>
+        <td class="user-column">addarsh@userport.ai</td>
+        <td class="user-column">
+          What is the latency of Slack thread creation?
+        </td>
+        <td class="answer-column">
+          The overall latency of Slack thread creation when using the
+          asynchronous flow is around 0.9s at 50 percentile and 1.4s at 99
+          percentile.
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+{%endblock %}

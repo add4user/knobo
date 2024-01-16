@@ -1,0 +1,59 @@
+{% extends 'application/logged_in_base.html' %} {% block main_content %}
+<div id="home">
+  <div id="home-heading">
+    <h2>Knobo: Knowlege Onboarding Assistant for Larger Engineering Teams</h2>
+  </div>
+  <div id="problem-details">
+    <h3>Problem</h3>
+    <ul>
+      <li>
+        No one engineer has the knowledge of the entire system architecture.
+      </li>
+      <li>System is generally broken down into different capabilities.</li>
+      <li>
+        Senior engineers are the Point of Contacts (PoCs) for knowledge with
+        each capability.
+      </li>
+    </ul>
+    <p>
+      A new engineer who needs to understand the system OR a team leader who
+      needs answers for specific questions needs to set up 1:1 time with the
+      specific PoC for knowledge sync.
+    </p>
+    <p>This leads to:</p>
+    <ul>
+      <li>Time lost waiting for sync meetings to answer basic questions.</li>
+      <li>
+        Time lost to sometimes contacting multiple PoCs to get to complete
+        answer.
+      </li>
+      <li>Time wasted for PoCs having to answer repetitive questions.</li>
+    </ul>
+  </div>
+  <div id="solution-details">
+    <h3>Solution</h3>
+    <p>
+      Ask Knobo (Knowledge Onboarding Assistant) instead. Just upload
+      documentation or wikis and it will answer the questions at your own time
+      without bothering the PoC.
+    </p>
+    <p>Advantages:</p>
+    <ul>
+      <li>
+        Time saved in getting answer needed.
+        <ul>
+          <li>
+            For new engineers, this could be faster onboarding with better
+            understanding.
+          </li>
+          <li>For leaders, time can be even more critical.</li>
+        </ul>
+      </li>
+      <li>Time saved for PoCs.</li>
+      <li>PoCs are responsible for maintaining accurate documentation.</li>
+      <li>Knowledge is transparently maintained across the team.</li>
+      <li>Developer productivity is higher.</li>
+    </ul>
+  </div>
+</div>
+{%endblock %}

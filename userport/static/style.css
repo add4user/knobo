@@ -295,6 +295,44 @@ body {
   height: 100%;
 }
 
+/* Home View styles */
+
+#home {
+  word-spacing: 2px;
+  color: rgb(58, 57, 57);
+  width: 80%;
+  height: 80%;
+  overflow-y: auto;
+  margin: auto;
+  border-bottom: 1px solid lightgray;
+
+  display: flex;
+  flex-direction: column;
+}
+
+#home-heading {
+  margin-top: 10%;
+}
+
+#problem-details {
+  display: flex;
+  flex-direction: column;
+}
+
+#problem-details li {
+  margin-top: 10px;
+}
+
+#solution-details {
+  margin-top: 3%;
+  display: flex;
+  flex-direction: column;
+}
+
+#solution-details li {
+  margin-top: 10px;
+}
+
 /* Upload URLs */
 
 #upload-url-box {
@@ -466,6 +504,61 @@ body {
   cursor: pointer;
   color: white;
   background-color: rgb(211, 44, 44);
+}
+
+/* Styles associated with Query Reports */
+
+#report {
+  height: 90%;
+  overflow: auto;
+
+  display: flex;
+  justify-content: center;
+}
+
+#query-table {
+  margin-top: 5%;
+  max-width: 80%;
+  border-collapse: collapse;
+}
+
+#query-table th,
+td {
+  border: 1px solid rgb(207, 207, 207);
+}
+
+#query-table th {
+  padding: 20px;
+  background-color: #8375e1;
+  color: white;
+}
+
+#query-table td {
+  padding: 10px;
+  color: rgb(51, 50, 50);
+  font-size: 0.9rem;
+  word-spacing: 2px;
+}
+
+.date-column {
+  width: 15%;
+  text-align: center;
+}
+
+.user-column {
+  width: 5%;
+}
+
+.query-column {
+  width: 25%;
+}
+
+.answer-column {
+  width: 55%;
+}
+
+.answer-not-found {
+  background-color: rgb(244, 191, 91);
 }
 
 /* Widget Styles, will be moved to separate file after testing. */

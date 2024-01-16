@@ -69,13 +69,21 @@ def invalid_api_usage(e):
 def get_user_id():
     return session["_user_id"]
 
+@bp.route('/', methods=['GET'])
+@login_required
+def home_view():
+    """
+    View to show Home view.
+    """
+    return render_template('application/home.html')
+
 
 """
 Upload URL views and APIs.
 """
 
 
-@bp.route('/', methods=['GET'])
+@bp.route('/uploads', methods=['GET'])
 @login_required
 def uploads_view():
     """
@@ -465,3 +473,12 @@ def chat_view():
     View to show chat with bot.
     """
     return render_template('application/chat.html')
+
+
+@bp.route('/report', methods=['GET'])
+@login_required
+def report_view():
+    """
+    View to show chat with bot.
+    """
+    return render_template('application/report.html')

@@ -18,11 +18,17 @@ function main() {
   switch (route) {
     case "/":
       new LoggedInBaseView();
+      break;
+    case "/uploads":
+      new LoggedInBaseView();
       new UploadURL();
       break;
     case "/chat":
       new LoggedInBaseView();
       new ChatWidgetView();
+      break;
+    case "/report":
+      new LoggedInBaseView();
       break;
     case "/api-key":
       new LoggedInBaseView();
