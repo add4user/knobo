@@ -474,6 +474,8 @@ body {
 :root {
   /* Width of the chat widget. */
   --userport-widget-width: 1000px;
+  /* Height of the chat widget. */
+  --userport-widget-height: 600px;
   /* z-index of the widget and button. */
   --userport-z-index: 5;
   /* border width for the widget */
@@ -483,7 +485,7 @@ body {
   /* Distance of the widget from right side of page. */
   --userport-widget-right-position: 100px;
   /* Distance of the widget button from the bottom of the page. */
-  --userport-widget-button-bottom-position: -600px;
+  --userport-widget-button-bottom-position: -700px;
   /* Height of the widget button. */
   --userport-widget-button-height: 40px;
   /* Percent height of chat header. */
@@ -515,7 +517,7 @@ body {
   z-index: var(--userport-z-index);
 
   width: var(--userport-widget-width);
-  height: 500px;
+  height: var(--userport-widget-height);
   border-top-right-radius: var(--userport-border-radius);
   border-top-left-radius: var(--userport-border-radius);
   padding-top: 5px;
