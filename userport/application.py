@@ -12,6 +12,7 @@ from userport.models import (
     MessageCreatorType
 )
 from userport.inference_assistant import InferenceAssistant, InferenceResult
+from userport.exceptions import APIException
 from userport.utils import generate_hash
 from typing import List
 from userport.db import (
@@ -40,23 +41,6 @@ bp = Blueprint('application', __name__)
 debug = False
 
 
-class APIException(Exception):
-    """
-    Class to convert API errors to JSON messages with appropriate formats.
-    """
-
-    def __init__(self, status_code: int, message: str) -> None:
-        super().__init__()
-        self.status_code = status_code
-        self.message = message
-
-    def to_dict(self):
-        return {'error_code': self.status_code, 'message': self.message}
-
-    def get_status_code(self):
-        return self.status_code
-
-
 @bp.errorhandler(APIException)
 def invalid_api_usage(e):
     """
@@ -68,6 +52,7 @@ def invalid_api_usage(e):
 # Used only when user is already logged in.
 def get_user_id():
     return session["_user_id"]
+
 
 @bp.route('/', methods=['GET'])
 @login_required

@@ -1,5 +1,6 @@
 from . import auth
 from . import application
+from . import slack_app
 import os
 from flask import Flask
 from celery import Celery, Task
@@ -36,9 +37,14 @@ def create_app():
     )
     app.register_blueprint(auth.bp)
     app.register_blueprint(application.bp)
+    app.register_blueprint(slack_app.bp)
 
     # For inference POST requests, we will rely on API key based authentication.
     csrf.exempt(application.perform_inference)
+
+    # Skip CSRF protection for all Slack app requests.
+    csrf.exempt(slack_app.bp)
+
     csrf.init_app(app)
     auth.login_manager.init_app(app)
     celery_init_app(app)
