@@ -1,5 +1,6 @@
-from typing import Dict
-from pydantic import BaseModel
+from typing import Dict, ClassVar
+from pydantic import BaseModel, validator
+from userport.slack_blocks import RichTextBlock
 
 """
 Module contains helper classes to manage creation and parsing of Slack Modal Views.
@@ -77,18 +78,58 @@ class SubmissionPayload(InteractionPayload):
 class CreateDocState(BaseModel):
     """
     State associated with Create Document view submission.
+
+    The structure is derived from the actual payload we receive from Slack.
     """
     class Values(BaseModel):
         class HeadingBlock(BaseModel):
-            create_doc_heading_value: Dict
+            class HeadingBlockValue(BaseModel):
+                type: str
+                value: str
+
+                @validator("type")
+                def validate_type(cls, v):
+                    if v != 'plain_text_input':
+                        raise ValueError(
+                            f"Expected 'plain_text_input' as type value for HeadingBlockValue, got {v}")
+                    return v
+
+            create_doc_heading_value: HeadingBlockValue
 
         class BodyBlock(BaseModel):
-            create_doc_body_value: Dict
+            class BodyBlockValue(BaseModel):
+                type: str
+                rich_text_value: RichTextBlock
+
+                @validator("type")
+                def validate_type(cls, v):
+                    if v != 'rich_text_input':
+                        raise ValueError(
+                            f"Expected 'rich_text_input' as type value for BodyBlockValue, got {v}")
+                    return v
+
+            create_doc_body_value: BodyBlockValue
 
         create_doc_heading: HeadingBlock
         create_doc_body: BodyBlock
 
     values: Values
+
+    def get_heading_markdown(self) -> str:
+        """
+        Get heading as Markdown formatted text.
+
+        We will convert it to a Heading 2 for now.
+        TODO: The heading number should be based on which section
+        the user wants to insert the text.
+        """
+        return f'## {self.values.create_doc_heading.create_doc_heading_value.value}'
+
+    def get_body_markdown(self) -> str:
+        """
+        Get body as Markdown formatted text.
+        """
+        return self.values.create_doc_body.create_doc_body_value.rich_text_value.get_markdown()
 
 
 class CreateDocSubmissionView(CommonView):
@@ -96,6 +137,12 @@ class CreateDocSubmissionView(CommonView):
     Create Document View submission.
     """
     state: CreateDocState
+
+    def get_heading_markdown(self) -> str:
+        return self.state.get_heading_markdown()
+
+    def get_body_markdown(self) -> str:
+        return self.state.get_body_markdown()
 
 
 class CreateDocSubmissionPayload(InteractionPayload):
@@ -107,6 +154,18 @@ class CreateDocSubmissionPayload(InteractionPayload):
     def get_title(self) -> str:
         return self.view.get_title()
 
+    def get_heading_markdown(self) -> str:
+        """
+        Get Heading as Markdown formatted text.
+        """
+        return self.view.get_heading_markdown()
+
+    def get_body_markdown(self) -> str:
+        """
+        Get body as Markdown formatted text.
+        """
+        return self.view.get_body_markdown()
+
 
 class CreateDocModalView:
     """
@@ -115,6 +174,7 @@ class CreateDocModalView:
     VIEW_TITLE = "Create Documentation"
 
     HEADING_BLOCK_ID = "create_doc_heading"
+    HEADING_INPUT_TYPE = "plain_text_input"
     HEADING_ELEMENT_ACTION_ID = "create_doc_heading_value"
     HEADING_INPUT_TYPE = "plain_text_input"
 
@@ -144,7 +204,7 @@ class CreateDocModalView:
                         "emoji": True
                     },
                     "element": {
-                        "type": "plain_text_input",
+                        "type": CreateDocModalView.HEADING_INPUT_TYPE,
                         "action_id": CreateDocModalView.HEADING_ELEMENT_ACTION_ID,
                     }
                 },
