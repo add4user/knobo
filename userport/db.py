@@ -14,6 +14,7 @@ from userport.models import (
     ChatMessageModel,
     MessageCreatorType
 )
+from userport.slack_models import SlackUpload, SlackUploadStatus
 from datetime import datetime, timezone
 from bson.objectid import ObjectId
 from typing import Optional, Dict, List, Type
@@ -69,6 +70,14 @@ def _get_uploads() -> Collection:
     helper to fetch the collection.
     """
     return _get_db()['uploads']
+
+
+def _get_slack_uploads() -> Collection:
+    """
+    Returns Slack Uploads collection from database. All internal methods in this module should use this 
+    helper to fetch the collection.
+    """
+    return _get_db()['slack_uploads']
 
 
 def _get_sections() -> Collection:
@@ -282,6 +291,49 @@ def delete_upload_and_sections_transactionally(upload_id: str):
             if deleted_result.deleted_count != 1:
                 raise NotFoundException(
                     f"Expected 1 doc to be deleted, got {deleted_result.deleted_count} deleted")
+
+
+def create_slack_upload(creator_id: str, team_id: str, view_id: str, response_url: str) -> str:
+    """
+    Creates an Slack upload object and returns created ID.
+    """
+    current_time = _get_current_time()
+    upload = SlackUpload(creator_id=creator_id, team_id=team_id, view_id=view_id, response_url=response_url,
+                         status=SlackUploadStatus.NOT_STARTED, created_time=current_time, last_updated_time=current_time)
+
+    slack_uploads = _get_slack_uploads()
+    result = slack_uploads.insert_one(upload.model_dump(exclude=['id']))
+    return str(result.inserted_id)
+
+
+def update_slack_upload(view_id: str, heading: str, text: str):
+    """
+    Updates Slack upload with given View id with heading and text values. Throws exception if upload is not found.
+    """
+    uploads = _get_slack_uploads()
+    if not uploads.find_one_and_update(
+        {'view_id': view_id},
+        {'$set': {
+            'status': SlackUploadStatus.IN_PROGRESS,
+            'heading': heading,
+            'text': text,
+            'last_updated_time': _get_current_time(),
+        }
+        }
+    ):
+        raise NotFoundException(
+            f"No model found to update status with View ID: {view_id}")
+
+
+def delete_slack_upload(view_id: str):
+    """
+    Delete Slack upload with given View ID.
+    """
+    uploads = _get_slack_uploads()
+    result = uploads.delete_one({'view_id': view_id})
+    if result.deleted_count != 1:
+        raise NotFoundException(
+            f"Expected 1 Slack Upload with View ID: {view_id} to be deleted, got {result.deleted_count} deleted")
 
 
 def vector_search_sections(user_org_domain: str, query_vector_embedding: List[float], query_proper_nouns: List[str], document_limit: int) -> List[VectorSearchSectionResult]:

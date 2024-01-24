@@ -17,6 +17,8 @@ from userport.slack_modal_views import (
     CreateDocSubmissionPayload,
     CancelPayload
 )
+import userport.db
+from celery import shared_task
 
 bp = Blueprint('slack_app', __name__)
 
@@ -67,6 +69,9 @@ class SlashCommandRequest(BaseModel):
     """
     command: str
     trigger_id: str
+    response_url: str
+    team_id: str
+    user_id: str
 
 
 class SlashCommandVisibility(Enum):
@@ -102,7 +107,7 @@ def handle_events():
 
     verify_app_id(data)
     pprint.pprint(data)
-    return "ok", 200
+    return "", 200
 
 
 @bp.route('/slack/slash-command', methods=['POST'])
@@ -111,17 +116,17 @@ def handle_slash_command():
     We always want to acknowledge the Slash command per 
     https://api.slack.com/interactivity/slash-commands#responding_with_errors.
     So whenever we encounter a problem, we should just log it and send a response.
+
+    We have 3 seconds to respond per https://api.slack.com/interactivity/slash-commands#responding_basic_receipt.
     """
+    # Uncomment for debugging.
+    # pprint.pprint(request.form)
+
     try:
         slash_command_request = SlashCommandRequest(**request.form)
         if slash_command_request.command == '/knobo-create-doc':
-            web_client = get_slack_web_client()
-            slack_response: SlackResponse = web_client.views_open(
-                trigger_id=slash_command_request.trigger_id, view=CreateDocModalView.create_view())
-
-            view_created_response = ViewCreatedResponse(**slack_response.data)
-            # TODO: Store view ID in db so we can manage it in the future.
-            print("Created view ID: ", view_created_response.get_id())
+            create_view_in_background.delay(
+                slash_command_request.model_dump_json())
             return "", 200
     except Exception as e:
         print(
@@ -135,8 +140,39 @@ def handle_slash_command():
                                        text=f'Sorry we encountered an unsupported Slash command: {slash_command_request.command} . Please check documentation.')
 
 
+@shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})
+def create_view_in_background(slash_command_request_json: str):
+    """
+    Create View in shared task and write Slack upload to db.
+
+    We do this in Celery task since it may sometimes take > 3s in API path and
+    result in user seeing an operation_timeout error message in the Slack channel.
+    """
+    slash_command_request = SlashCommandRequest(
+        **json.loads(slash_command_request_json))
+
+    # Create view.
+    web_client = get_slack_web_client()
+    slack_response: SlackResponse = web_client.views_open(
+        trigger_id=slash_command_request.trigger_id, view=CreateDocModalView.create_view())
+    view_response = ViewCreatedResponse(**slack_response.data)
+
+    # Write upload to db.
+    user_id = slash_command_request.user_id
+    team_id = slash_command_request.team_id
+    view_id = view_response.get_id()
+    response_url = slash_command_request.response_url
+    userport.db.create_slack_upload(
+        creator_id=user_id, team_id=team_id, view_id=view_id, response_url=response_url)
+
+
 @bp.route('/slack/interactive-endpoint', methods=['POST'])
 def handle_interactive_endpoint():
+    """
+    Handle View closed and View submission payloads.
+
+    We have 3 seconds to respond: https://api.slack.com/interactivity/handling#acknowledgment_response
+    """
     interal_error_message = "Sorry encountered an internal error when handling modal input interaction"
     if 'payload' not in request.form:
         print(f'Expected "payload" field in form, got: {request.form}')
@@ -149,25 +185,55 @@ def handle_interactive_endpoint():
         print(
             f"Expected JSON payload in interaction, got errror when parsing: {e}")
         return interal_error_message, 200
-    pprint.pprint(payload_dict)
+
+    # Uncomment whenever you need to find out new fields to use from the payload.
+    # pprint.pprint(payload_dict)
 
     try:
         payload = InteractionPayload(**payload_dict)
         if payload.is_view_interaction():
             if payload.is_view_closed():
-                # TODO: Delete Conversation with given view ID since the view has been closed.
-                cancelled_payload = CancelPayload(**payload_dict)
-                print("create doc cancelled: ", cancelled_payload)
+                cancel_payload = CancelPayload(**payload_dict)
+                view_id = cancel_payload.get_view_id()
+
+                delete_upload_in_background.delay(view_id)
+
             elif payload.is_view_submission():
                 if SubmissionPayload(**payload_dict).get_title() == CreateDocModalView.get_create_doc_view_title():
                     create_doc_payload = CreateDocSubmissionPayload(
                         **payload_dict)
-                    print("Heading markdown: ",
-                          create_doc_payload.get_heading_markdown())
-                    print("Body markdown: ")
-                    print(create_doc_payload.get_body_markdown())
+                    view_id = create_doc_payload.get_view_id()
+                    heading = create_doc_payload.get_heading_markdown()
+                    body = create_doc_payload.get_body_markdown()
+
+                    complete_upload_in_background.delay(view_id, heading, body)
+                    return "", 200
+
     except Exception as e:
         print(f"Encountered error: {e} when parsing payload: {payload_dict}")
         return interal_error_message, 200
 
     return "", 200
+
+
+@shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})
+def delete_upload_in_background(view_id: str):
+    """
+    Delete Upload with given View ID in background.
+
+    Performed in Celery task so API call path can complete in less than 3s.
+    """
+    userport.db.delete_slack_upload(view_id=view_id)
+
+
+@shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})
+def complete_upload_in_background(view_id: str, heading: str, text: str):
+    """
+    Complete Upload of document. We will ensure 
+
+    Performed in Celery task so API call path can complete in less than 3s.
+    """
+    userport.db.update_slack_upload(
+        view_id=view_id, heading=heading, text=text)
+
+    # TODO: Create Slack section in db and update slack upload.

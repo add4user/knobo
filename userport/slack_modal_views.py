@@ -64,6 +64,12 @@ class CancelPayload(InteractionPayload):
     """
     view: CommonView
 
+    def get_view_id(self):
+        """
+        Returns View ID.
+        """
+        return self.view.get_id()
+
 
 class SubmissionPayload(InteractionPayload):
     """
@@ -138,6 +144,9 @@ class CreateDocSubmissionView(CommonView):
     """
     state: CreateDocState
 
+    def get_id(self) -> str:
+        return self.id
+
     def get_heading_markdown(self) -> str:
         return self.state.get_heading_markdown()
 
@@ -149,9 +158,39 @@ class CreateDocSubmissionPayload(InteractionPayload):
     """
     Class containing fields we care about in Create Document View submission payload.
     """
+    class SlackTeam(BaseModel):
+        id: str
+
+    class SlackUser(BaseModel):
+        id: str
+
     view: CreateDocSubmissionView
+    team: SlackTeam
+    user: SlackUser
+
+    def get_view_id(self) -> str:
+        """
+        Return View ID.
+        """
+        return self.view.get_id()
+
+    def get_team_id(self) -> str:
+        """
+        Return ID of the Slack Workspace.
+        """
+        return self.team.id
+
+    def get_user_id(self) -> str:
+        """
+        Return ID of the Slack user trying to create the doc.
+        """
+        return self.user.id
 
     def get_title(self) -> str:
+        """
+        Return title of the View which also
+        serves as identifier for the View type.
+        """
         return self.view.get_title()
 
     def get_heading_markdown(self) -> str:
@@ -213,7 +252,7 @@ class CreateDocModalView:
                     "block_id": CreateDocModalView.BODY_BLOCK_ID,
                     "label": {
                         "type": "plain_text",
-                        "text": "Body",
+                        "text": "Content",
                         "emoji": True
                     },
                     "element": {
