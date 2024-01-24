@@ -4,6 +4,7 @@ import json
 from enum import Enum
 from typing import Dict
 from slack_sdk import WebClient
+from slack_sdk.webhook import WebhookClient
 from slack_sdk.web.slack_response import SlackResponse
 from dotenv import load_dotenv
 from flask import Blueprint, request, jsonify, g
@@ -17,6 +18,7 @@ from userport.slack_modal_views import (
     CreateDocSubmissionPayload,
     CancelPayload
 )
+from userport.slack_models import SlackUpload, SlackUploadStatus
 import userport.db
 from celery import shared_task
 
@@ -233,7 +235,20 @@ def complete_upload_in_background(view_id: str, heading: str, text: str):
 
     Performed in Celery task so API call path can complete in less than 3s.
     """
-    userport.db.update_slack_upload(
-        view_id=view_id, heading=heading, text=text)
+    slack_upload: SlackUpload
+    try:
+        slack_upload = userport.db.get_slack_upload(view_id=view_id)
+    except userport.db.NotFoundException as e:
+        print(e)
+        print("Upload complete failed for View ID: ", view_id)
+        return
+
+    if slack_upload.status != SlackUploadStatus.IN_PROGRESS:
+        webhook = WebhookClient(slack_upload.response_url)
+        webhook.send(text="Documentation creation is in progress! I will ping you once it's done!",
+                     response_type=SlashCommandVisibility.PRIVATE.value)
+
+        userport.db.update_slack_upload(
+            view_id=view_id, heading=heading, text=text)
 
     # TODO: Create Slack section in db and update slack upload.

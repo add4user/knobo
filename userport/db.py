@@ -306,6 +306,19 @@ def create_slack_upload(creator_id: str, team_id: str, view_id: str, response_ur
     return str(result.inserted_id)
 
 
+def get_slack_upload(view_id: str) -> SlackUpload:
+    """
+    Returns True if Slack Upload associated with given View ID is in progress and False otherwise.
+    """
+    uploads = _get_slack_uploads()
+    upload_model: Optional[SlackUpload] = _model_from_dict(
+        SlackUpload, uploads.find_one({"view_id": view_id}))
+    if upload_model == None:
+        raise NotFoundException(
+            f'No Slack Upload found for View ID: {view_id}')
+    return upload_model
+
+
 def update_slack_upload(view_id: str, heading: str, text: str):
     """
     Updates Slack upload with given View id with heading and text values. Throws exception if upload is not found.
