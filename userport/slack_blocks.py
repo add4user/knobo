@@ -1,4 +1,4 @@
-from pydantic import BaseModel, validator, root_validator
+from pydantic import BaseModel, validator, root_validator, ConfigDict
 from typing import List, Dict, Optional, ClassVar
 
 """
@@ -169,7 +169,7 @@ class RichTextListElement(BaseModel):
         text_values: List[str] = []
         if self.style == RichTextListElement.STYLE_ORDERED:
             text_values = self._get_ordered_list_markdown()
-        elif self.style == RichTextListElement.STYLE_ORDERED:
+        elif self.style == RichTextListElement.STYLE_BULLET:
             text_values = self._get_bullet_list_markdown()
         return "\n".join(text_values)
 
@@ -223,9 +223,9 @@ class RichTextQuoteElement(BaseModel):
         """
         text_values: List[str] = []
         for elem in self.elements:
-            text = f'> {elem}'
-            text_values.append(text)
-        return "".join(text_values)
+            text_values.append(elem.get_markdown())
+        text_result = "".join(text_values)
+        return f'> {text_result}'
 
 
 class RichTextElement(BaseModel):
@@ -239,6 +239,10 @@ class RichTextElement(BaseModel):
     type: str
     # The exact type of the dictionary depends on the type of element.
     elements: List[Dict]
+
+    # We want to allow extra attributes because we want to cast RichTextElement
+    # to the appropriate element clas once we know what the type is.
+    model_config = ConfigDict(extra='allow')
 
     @validator("type")
     def validate_type(cls, v):

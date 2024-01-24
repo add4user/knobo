@@ -162,12 +162,10 @@ def handle_interactive_endpoint():
                 if SubmissionPayload(**payload_dict).get_title() == CreateDocModalView.get_create_doc_view_title():
                     create_doc_payload = CreateDocSubmissionPayload(
                         **payload_dict)
-                    print("created doc payload: ", create_doc_payload)
-
                     print("Heading markdown: ",
                           create_doc_payload.get_heading_markdown())
-                    print("Body markdown: ",
-                          create_doc_payload.get_body_markdown())
+                    print("Body markdown: ")
+                    print(create_doc_payload.get_body_markdown())
     except Exception as e:
         print(f"Encountered error: {e} when parsing payload: {payload_dict}")
         return interal_error_message, 200
