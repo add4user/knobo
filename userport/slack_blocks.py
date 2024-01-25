@@ -99,7 +99,7 @@ class RichTextSectionElement(BaseModel):
     """
     TYPE_VALUE: ClassVar[str] = 'rich_text_section'
 
-    type: str
+    type: str = TYPE_VALUE
     elements: List[RichTextObject]
 
     @validator("type")
@@ -127,7 +127,7 @@ class RichTextListElement(BaseModel):
     STYLE_BULLET: ClassVar[str] = 'bullet'
     STYLE_ORDERED: ClassVar[str] = 'ordered'
 
-    type: str
+    type: str = TYPE_VALUE
     style: str
     elements: List[RichTextSectionElement]
     border: Optional[int] = None
@@ -200,7 +200,7 @@ class RichTextPreformattedElement(BaseModel):
     Reference: https://api.slack.com/reference/block-kit/blocks#rich_text_preformatted
     """
     TYPE_VALUE: ClassVar[str] = 'rich_text_preformatted'
-    type: str
+    type: str = TYPE_VALUE
     border: int
     elements: List[RichTextObject]
 
@@ -227,7 +227,7 @@ class RichTextQuoteElement(BaseModel):
     Reference: https://api.slack.com/reference/block-kit/blocks#rich_text_quote
     """
     TYPE_VALUE: ClassVar[str] = 'rich_text_quote'
-    type: str
+    type: str = TYPE_VALUE
     border: Optional[int] = None
     elements: List[RichTextObject]
 
@@ -249,41 +249,6 @@ class RichTextQuoteElement(BaseModel):
         return f'> {text_result}'
 
 
-class RichTextElement(BaseModel):
-    """
-    Class representing Rich Text Element.
-
-    Type can be one of: rich_text_section, rich_text_list, rich_text_preformatted, and rich_text_quote.
-
-    Reference: https://api.slack.com/reference/block-kit/blocks#rich_text
-    """
-    type: str
-    # The exact type of the dictionary depends on the type of element.
-    elements: List[Dict]
-
-    # We want to allow extra attributes because we want to cast RichTextElement
-    # to the appropriate element clas once we know what the type is.
-    model_config = ConfigDict(extra='allow')
-
-    @validator("type")
-    def validate_type(cls, v):
-        if v not in set([RichTextSectionElement.TYPE_VALUE, RichTextListElement.TYPE_VALUE, RichTextPreformattedElement.TYPE_VALUE, RichTextQuoteElement.TYPE_VALUE]):
-            raise ValueError(f"Expected rich_text element types, got {v}")
-        return v
-
-    def is_section(self) -> bool:
-        return self.type == RichTextSectionElement.TYPE_VALUE
-
-    def is_list(self) -> bool:
-        return self.type == RichTextListElement.TYPE_VALUE
-
-    def is_preformatted(self) -> bool:
-        return self.type == RichTextPreformattedElement.TYPE_VALUE
-
-    def is_quote(self) -> bool:
-        return self.type == RichTextQuoteElement.TYPE_VALUE
-
-
 class RichTextBlock(BaseModel):
     """
     Class representing Rich Text Block.
@@ -291,8 +256,10 @@ class RichTextBlock(BaseModel):
     Reference: https://api.slack.com/reference/block-kit/blocks#rich_text
     """
     TYPE_VALUE: ClassVar[str] = 'rich_text'
-    type: str
-    elements: List[RichTextElement]
+    type: str = TYPE_VALUE
+    elements: List[Union[RichTextSectionElement, RichTextListElement,
+                         RichTextPreformattedElement, RichTextQuoteElement]]
+    block_id: Optional[str] = None
 
     @validator("type")
     def validate_type(cls, v):
@@ -308,15 +275,15 @@ class RichTextBlock(BaseModel):
         text_values: List[str] = []
         for elem in self.elements:
             text: str
-            if elem.is_section():
+            if isinstance(elem, RichTextSectionElement):
                 text = RichTextSectionElement(
                     **elem.model_dump()).get_markdown()
-            elif elem.is_list():
+            elif isinstance(elem, RichTextListElement):
                 text = RichTextListElement(**elem.model_dump()).get_markdown()
-            elif elem.is_preformatted():
+            elif isinstance(elem, RichTextPreformattedElement):
                 text = RichTextPreformattedElement(
                     **elem.model_dump()).get_markdown()
-            elif elem.is_quote():
+            elif isinstance(elem, RichTextQuoteElement):
                 text = RichTextQuoteElement(
                     **elem.model_dump()).get_markdown()
             else:

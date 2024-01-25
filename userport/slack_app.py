@@ -1,6 +1,7 @@
 import os
 import pprint
 import json
+import logging
 from enum import Enum
 from typing import Dict
 from slack_sdk import WebClient
@@ -216,7 +217,7 @@ def create_modal_from_shortcut_in_background(create_doc_shortcut_json: str):
     view = create_document_view(initial_body_value=initial_rich_text_block)
     web_client = get_slack_web_client()
     slack_response: SlackResponse = web_client.views_open(
-        trigger_id=create_doc_shortcut.get_trigger_id(), view=view.model_dump())
+        trigger_id=create_doc_shortcut.get_trigger_id(), view=view.model_dump(exclude_none=True))
     view_response = ViewCreatedResponse(**slack_response.data)
 
     # Write upload to db.
@@ -261,5 +262,9 @@ def complete_upload_in_background(view_id: str, heading: str, text: str):
 
         userport.db.update_slack_upload(
             view_id=view_id, heading=heading, text=text)
+
+        # This part is just for debugging.
+        # slack_upload = userport.db.get_slack_upload(view_id=view_id)
+        # logging.info(slack_upload.text)
 
     # TODO: Create Slack section in db and update slack upload.

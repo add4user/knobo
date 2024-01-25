@@ -1,11 +1,13 @@
-from typing import ClassVar, List
+from typing import ClassVar, List, Union
 from pydantic import BaseModel, validator
 from userport.slack_blocks import (
     RichTextBlock,
     TextObject,
     InputBlock,
     PlainTextInputElement,
-    RichTextInputElement
+    RichTextInputElement,
+    RichTextSectionElement,
+    RichTextObject
 )
 
 """
@@ -348,7 +350,7 @@ class BaseModalView(BaseModel):
 
     type: str = MODAL_VALUE
     title: PlainTextObject
-    blocks: List[InputBlock]
+    blocks: List[Union[InputBlock, RichTextBlock]]
     submit: PlainTextObject
     close: PlainTextObject
     notify_on_close: bool = True
@@ -366,7 +368,9 @@ class CreateDocModalView(BaseModalView):
     Class that takes creates a view to ask for section heading and 
     content inputs from a user.
     """
-    VIEW_TITLE: ClassVar[str] = "Create Documentation"
+    VIEW_TITLE: ClassVar[str] = "Create Section"
+
+    INFORMATION_BLOCK_ID: ClassVar[str] = "create_doc_info"
 
     HEADING_TEXT: ClassVar[str] = "Heading"
     HEADING_BLOCK_ID: ClassVar[str] = "create_doc_heading"
@@ -394,6 +398,20 @@ def create_document_view(initial_body_value: RichTextBlock) -> CreateDocModalVie
     return CreateDocModalView(
         title=PlainTextObject(text=CreateDocModalView.get_view_title()),
         blocks=[
+            RichTextBlock(
+                block_id=CreateDocModalView.INFORMATION_BLOCK_ID,
+                elements=[
+                    RichTextSectionElement(
+                        elements=[
+                            RichTextObject(
+                                type=RichTextObject.TYPE_TEXT,
+                                text="You are about to create a new section with a heading and associated body that will be added to the documentation." +
+                                " Once both fields are filled, please click Next. You can abort this operation by clicking Cancel."
+                            )
+                        ]
+                    )
+                ],
+            ),
             InputBlock(
                 label=PlainTextObject(text=CreateDocModalView.HEADING_TEXT),
                 block_id=CreateDocModalView.HEADING_BLOCK_ID,
