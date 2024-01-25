@@ -1,6 +1,12 @@
-from typing import Dict, ClassVar, List
+from typing import ClassVar, List
 from pydantic import BaseModel, validator
-from userport.slack_blocks import RichTextBlock
+from userport.slack_blocks import (
+    RichTextBlock,
+    TextObject,
+    InputBlock,
+    PlainTextInputElement,
+    RichTextInputElement
+)
 
 """
 Module contains helper classes to manage creation and parsing of Slack Modal Views.
@@ -49,6 +55,9 @@ class CommonView(BaseModel):
 
     id: str
     title: Title
+    # hash is used to avoid race conditions when calling view.update.
+    # https://api.slack.com/surfaces/modals#handling_race_conditions
+    hash: str
 
     def get_id(self) -> str:
         return self.id
@@ -308,77 +317,98 @@ class MessageShortcutPayload(InteractionPayload):
         return self.message.get_markdown()
 
 
-class CreateDocModalView:
+class PlainTextObject(TextObject):
     """
-    Helper methods to manage Create Documentation Modal View.
+    Only Plain Text objects less than 24 characters in lenght allowed.
     """
-    VIEW_TITLE = "Create Documentation"
+    type: str = "plain_text"
 
-    HEADING_BLOCK_ID = "create_doc_heading"
-    HEADING_INPUT_TYPE = "plain_text_input"
-    HEADING_ELEMENT_ACTION_ID = "create_doc_heading_value"
-    HEADING_INPUT_TYPE = "plain_text_input"
+    @validator("type")
+    def validate_title_type(cls, v):
+        if v != "plain_text":
+            raise ValueError(
+                f"Expected 'plain_text' element type, got {v}")
+        return v
 
-    BODY_BLOCK_ID = "create_doc_body"
-    BODY_ELEMENT_ACTION_ID = "create_doc_body_value"
+    @validator("text")
+    def validate_type(cls, v):
+        if len(v) > 24:
+            raise ValueError(
+                f"Expected text to be max 24 chars in length, got {v}")
+        return v
+
+
+class BaseModalView(BaseModel):
+    """
+    Base Class to represent a Modal View object.
+
+    Reference: https://api.slack.com/reference/surfaces/views
+    """
+    MODAL_VALUE: ClassVar[str] = "modal"
+
+    type: str = MODAL_VALUE
+    title: PlainTextObject
+    blocks: List[InputBlock]
+    submit: PlainTextObject
+    close: PlainTextObject
+    notify_on_close: bool = True
+
+    @validator("type")
+    def validate_type(cls, v):
+        if v != BaseModalView.MODAL_VALUE:
+            raise ValueError(
+                f"Expected {BaseModalView.MODAL_VALUE} element type, got {v}")
+        return v
+
+
+class CreateDocModalView(BaseModalView):
+    """
+    Class that takes creates a view to ask for section heading and 
+    content inputs from a user.
+    """
+    VIEW_TITLE: ClassVar[str] = "Create Documentation"
+
+    HEADING_TEXT: ClassVar[str] = "Heading"
+    HEADING_BLOCK_ID: ClassVar[str] = "create_doc_heading"
+    HEADING_ELEMENT_ACTION_ID: ClassVar[str] = "create_doc_heading_value"
+
+    BODY_TEXT: ClassVar[str] = "Body"
+    BODY_BLOCK_ID: ClassVar[str] = "create_doc_body"
+    BODY_ELEMENT_ACTION_ID: ClassVar[str] = "create_doc_body_value"
+
+    SUBMIT_TEXT: ClassVar[str] = "Next"
+    CLOSE_TEXT: ClassVar[str] = "Cancel"
 
     @staticmethod
-    def create_view(rich_text_block: RichTextBlock) -> Dict:
-        """
-        Creates Modal View from given Slash command Trigger ID and returns a Slack View object.
-        View: https://api.slack.com/reference/surfaces/views#modal__modal-view-example
-        """
-        return {
-            "type": "modal",
-            "title": {
-                "type": "plain_text",
-                "text": CreateDocModalView.get_create_doc_view_title(),
-                "emoji": True
-            },
-            "blocks": [
-                {
-                    "type": "input",
-                    "block_id": CreateDocModalView.HEADING_BLOCK_ID,
-                    "label": {
-                        "type": "plain_text",
-                        "text": "Heading",
-                        "emoji": True
-                    },
-                    "element": {
-                        "type": CreateDocModalView.HEADING_INPUT_TYPE,
-                        "action_id": CreateDocModalView.HEADING_ELEMENT_ACTION_ID,
-                    }
-                },
-                {
-                    "type": "input",
-                    "block_id": CreateDocModalView.BODY_BLOCK_ID,
-                    "label": {
-                        "type": "plain_text",
-                        "text": "Content",
-                        "emoji": True
-                    },
-                    "element": {
-                        "type": "rich_text_input",
-                        "action_id": CreateDocModalView.BODY_ELEMENT_ACTION_ID,
-                        "initial_value": rich_text_block.model_dump(),
-                    }
-                }
-            ],
-            "submit": {
-                "type": "plain_text",
-                "text": "Submit",
-                "emoji": True
-            },
-            "close": {
-                "type": "plain_text",
-                "text": "Cancel"
-            },
-            "notify_on_close": True,
-        }
-
-    @staticmethod
-    def get_create_doc_view_title() -> str:
+    def get_view_title() -> str:
         """
         Helper to fetch Title of Create Documentation modal view.
         """
         return CreateDocModalView.VIEW_TITLE
+
+
+def create_document_view(initial_body_value: RichTextBlock) -> CreateDocModalView:
+    """
+    Returns view for Create document with given initial value for section body.
+    """
+    return CreateDocModalView(
+        title=PlainTextObject(text=CreateDocModalView.get_view_title()),
+        blocks=[
+            InputBlock(
+                label=PlainTextObject(text=CreateDocModalView.HEADING_TEXT),
+                block_id=CreateDocModalView.HEADING_BLOCK_ID,
+                element=PlainTextInputElement(
+                    action_id=CreateDocModalView.HEADING_ELEMENT_ACTION_ID)
+            ),
+            InputBlock(
+                label=PlainTextObject(text=CreateDocModalView.BODY_TEXT),
+                block_id=CreateDocModalView.BODY_BLOCK_ID,
+                element=RichTextInputElement(
+                    action_id=CreateDocModalView.BODY_ELEMENT_ACTION_ID,
+                    initial_value=initial_body_value,
+                )
+            )
+        ],
+        submit=PlainTextObject(text=CreateDocModalView.SUBMIT_TEXT),
+        close=PlainTextObject(text=CreateDocModalView.CLOSE_TEXT),
+    )

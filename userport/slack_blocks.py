@@ -1,5 +1,5 @@
 from pydantic import BaseModel, validator, root_validator, ConfigDict
-from typing import List, Dict, Optional, ClassVar
+from typing import List, Dict, Optional, ClassVar, Union
 
 """
 Module that contains the different Slack Blocks classes which are components
@@ -7,6 +7,27 @@ used to create visually rich and interactive messages.
 
 Reference: https://api.slack.com/reference/block-kit/blocks
 """
+
+
+class TextObject(BaseModel):
+    """
+    Represents plain or markdown text object. Use RichTextObject if validating text from Slack's WYSIWYG editor.
+
+    Reference: https://api.slack.com/reference/block-kit/composition-objects#text
+    """
+    TYPE_PLAIN_TEXT: ClassVar[str] = 'text'
+    TYPE_MARKDOWN: ClassVar[str] = 'mrkdwn'
+
+    type: str
+    text: str
+    emoji: bool = True
+
+    @validator("type")
+    def validate_type(cls, v):
+        if v not in set([TextObject.TYPE_PLAIN_TEXT, TextObject.TYPE_MARKDOWN]):
+            raise ValueError(
+                f"Expected {TextObject.TYPE_PLAIN_TEXT} or {TextObject.TYPE_MARKDOWN} type, got {v}")
+        return v
 
 
 class RichTextObject(BaseModel):
@@ -303,3 +324,81 @@ class RichTextBlock(BaseModel):
                     f"Rich Text Element Type cannot be converted to markdown: {elem}")
             text_values.append(text)
         return "\n".join(text_values)
+
+
+class TextInputElement(BaseModel):
+    """
+    Class representing either Plain Text Input Element or Rich Text Input Element.
+
+    References:
+    1. https://api.slack.com/reference/block-kit/block-elements#input
+    2. https://api.slack.com/reference/block-kit/block-elements#rich_text_input
+    """
+    PLAIN_TEXT_INPUT_VALUE: ClassVar[str] = "plain_text_input"
+    RICH_TEXT_INPUT_VALUE: ClassVar[str] = "rich_text_input"
+
+    type: str
+    action_id: str
+    initial_value: Union[str, RichTextBlock]
+
+    @validator("type")
+    def validate_type(cls, v):
+        if v not in set([TextInputElement.PLAIN_TEXT_INPUT_VALUE, TextInputElement.RICH_TEXT_INPUT_VALUE]):
+            raise ValueError(
+                f"Expected {TextInputElement.PLAIN_TEXT_INPUT_VALUE} or {TextInputElement.RICH_TEXT_INPUT_VALUE} as type values, got {v}")
+        return v
+
+
+class PlainTextInputElement(TextInputElement):
+    """
+    Class representing either Plain Text Input Element.
+
+    Reference: https://api.slack.com/reference/block-kit/block-elements#input
+    """
+    type: str = TextInputElement.PLAIN_TEXT_INPUT_VALUE
+    initial_value: str = ""
+
+    @validator("type")
+    def validate_plain_text_type(cls, v):
+        if v != TextInputElement.PLAIN_TEXT_INPUT_VALUE:
+            raise ValueError(
+                f"Expected {TextInputElement.PLAIN_TEXT_INPUT_VALUE} as type value, got {v}")
+        return v
+
+
+class RichTextInputElement(TextInputElement):
+    """
+    Class representing either Rich Text Input Element.
+
+    Reference: https://api.slack.com/reference/block-kit/block-elements#rich_text_input
+    """
+    type: str = TextInputElement.RICH_TEXT_INPUT_VALUE
+    initial_value: RichTextBlock
+
+    @validator("type")
+    def validate_rich_text_type(cls, v):
+        if v != TextInputElement.RICH_TEXT_INPUT_VALUE:
+            raise ValueError(
+                f"Expected {TextInputElement.RICH_TEXT_INPUT_VALUE} as type value, got {v}")
+        return v
+
+
+class InputBlock(BaseModel):
+    """
+    Class representing Input Block.
+
+    Reference: https://api.slack.com/reference/block-kit/blocks#input
+    """
+    TYPE_VALUE: ClassVar[str] = 'input'
+
+    type: str = TYPE_VALUE
+    label: TextObject
+    block_id: str
+    element: TextInputElement
+
+    @validator("type")
+    def validate_type(cls, v):
+        if v != InputBlock.TYPE_VALUE:
+            raise ValueError(
+                f"Expected {InputBlock.TYPE_VALUE} as type value, got {v}")
+        return v

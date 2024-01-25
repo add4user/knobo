@@ -17,7 +17,8 @@ from userport.slack_modal_views import (
     SubmissionPayload,
     CreateDocSubmissionPayload,
     CancelPayload,
-    MessageShortcutPayload
+    MessageShortcutPayload,
+    create_document_view
 )
 from userport.slack_models import SlackUpload, SlackUploadStatus
 import userport.db
@@ -181,7 +182,7 @@ def handle_interactive_endpoint():
                 delete_upload_in_background.delay(view_id)
 
             elif payload.is_view_submission():
-                if SubmissionPayload(**payload_dict).get_title() == CreateDocModalView.get_create_doc_view_title():
+                if SubmissionPayload(**payload_dict).get_title() == CreateDocModalView.get_view_title():
                     create_doc_payload = CreateDocSubmissionPayload(
                         **payload_dict)
                     view_id = create_doc_payload.get_view_id()
@@ -212,11 +213,10 @@ def create_modal_from_shortcut_in_background(create_doc_shortcut_json: str):
 
     # Create view.
     initial_rich_text_block = create_doc_shortcut.get_rich_text_block()
-    view = CreateDocModalView.create_view(
-        rich_text_block=initial_rich_text_block)
+    view = create_document_view(initial_body_value=initial_rich_text_block)
     web_client = get_slack_web_client()
     slack_response: SlackResponse = web_client.views_open(
-        trigger_id=create_doc_shortcut.get_trigger_id(), view=view)
+        trigger_id=create_doc_shortcut.get_trigger_id(), view=view.model_dump())
     view_response = ViewCreatedResponse(**slack_response.data)
 
     # Write upload to db.
