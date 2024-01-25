@@ -16,7 +16,8 @@ from userport.slack_modal_views import (
     InteractionPayload,
     SubmissionPayload,
     CreateDocSubmissionPayload,
-    CancelPayload
+    CancelPayload,
+    MessageShortcutPayload
 )
 from userport.slack_models import SlackUpload, SlackUploadStatus
 import userport.db
@@ -127,8 +128,8 @@ def handle_slash_command():
     try:
         slash_command_request = SlashCommandRequest(**request.form)
         if slash_command_request.command == '/knobo-create-doc':
-            create_view_in_background.delay(
-                slash_command_request.model_dump_json())
+            # Do nothing since we don't need this Slash command for now.
+            # TODO: clean up handler.
             return "", 200
     except Exception as e:
         print(
@@ -140,32 +141,6 @@ def handle_slash_command():
         f'Unsupported slash command received: {slash_command_request.command}')
     return make_slash_command_response(visibility=SlashCommandVisibility.PRIVATE,
                                        text=f'Sorry we encountered an unsupported Slash command: {slash_command_request.command} . Please check documentation.')
-
-
-@shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})
-def create_view_in_background(slash_command_request_json: str):
-    """
-    Create View in shared task and write Slack upload to db.
-
-    We do this in Celery task since it may sometimes take > 3s in API path and
-    result in user seeing an operation_timeout error message in the Slack channel.
-    """
-    slash_command_request = SlashCommandRequest(
-        **json.loads(slash_command_request_json))
-
-    # Create view.
-    web_client = get_slack_web_client()
-    slack_response: SlackResponse = web_client.views_open(
-        trigger_id=slash_command_request.trigger_id, view=CreateDocModalView.create_view())
-    view_response = ViewCreatedResponse(**slack_response.data)
-
-    # Write upload to db.
-    user_id = slash_command_request.user_id
-    team_id = slash_command_request.team_id
-    view_id = view_response.get_id()
-    response_url = slash_command_request.response_url
-    userport.db.create_slack_upload(
-        creator_id=user_id, team_id=team_id, view_id=view_id, response_url=response_url)
 
 
 @bp.route('/slack/interactive-endpoint', methods=['POST'])
@@ -193,7 +168,12 @@ def handle_interactive_endpoint():
 
     try:
         payload = InteractionPayload(**payload_dict)
-        if payload.is_view_interaction():
+        if payload.is_message_shortcut():
+            shortcut_payload = MessageShortcutPayload(**payload_dict)
+            if shortcut_payload.is_create_doc_shortcut():
+                create_modal_from_shortcut_in_background.delay(
+                    shortcut_payload.model_dump_json())
+        elif payload.is_view_interaction():
             if payload.is_view_closed():
                 cancel_payload = CancelPayload(**payload_dict)
                 view_id = cancel_payload.get_view_id()
@@ -216,6 +196,37 @@ def handle_interactive_endpoint():
         return interal_error_message, 200
 
     return "", 200
+
+
+@shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})
+def create_modal_from_shortcut_in_background(create_doc_shortcut_json: str):
+    """
+    Create Modal View in shared task and write Slack upload to db after user initiates 
+    documentation creation from Shortcut.
+
+    We do this in Celery task since it can take > 3s in API path and
+    result in user seeing an operation_timeout error message in the Slack channel.
+    """
+    create_doc_shortcut = MessageShortcutPayload(
+        **json.loads(create_doc_shortcut_json))
+
+    # Create view.
+    initial_rich_text_block = create_doc_shortcut.get_rich_text_block()
+    view = CreateDocModalView.create_view(
+        rich_text_block=initial_rich_text_block)
+    web_client = get_slack_web_client()
+    slack_response: SlackResponse = web_client.views_open(
+        trigger_id=create_doc_shortcut.get_trigger_id(), view=view)
+    view_response = ViewCreatedResponse(**slack_response.data)
+
+    # Write upload to db.
+    user_id = create_doc_shortcut.get_user_id()
+    team_id = create_doc_shortcut.get_team_id()
+    shortcut_callback_id = create_doc_shortcut.get_callback_id()
+    view_id = view_response.get_id()
+    response_url = create_doc_shortcut.get_response_url()
+    userport.db.create_slack_upload(creator_id=user_id, team_id=team_id, view_id=view_id,
+                                    response_url=response_url, shortcut_callback_id=shortcut_callback_id)
 
 
 @shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})

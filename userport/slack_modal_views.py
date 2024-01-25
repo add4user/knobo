@@ -1,4 +1,4 @@
-from typing import Dict, ClassVar
+from typing import Dict, ClassVar, List
 from pydantic import BaseModel, validator
 from userport.slack_blocks import RichTextBlock
 
@@ -11,11 +11,19 @@ Reference: https://api.slack.com/reference/interaction-payloads/views#view_submi
 
 class InteractionPayload(BaseModel):
     """
-    Common class for Block Action, View submission or View Cancel payloads.
+    Common class for Message Shortcut, View submission or View Cancel payloads.
 
     Reference: https://api.slack.com/surfaces/modals#interactions
     """
+    class SlackTeam(BaseModel):
+        id: str
+
+    class SlackUser(BaseModel):
+        id: str
+
     type: str
+    team: SlackTeam
+    user: SlackUser
 
     def is_view_interaction(self) -> bool:
         return self.type.startswith("view")
@@ -25,6 +33,9 @@ class InteractionPayload(BaseModel):
 
     def is_view_submission(self) -> bool:
         return self.type == "view_submission"
+
+    def is_message_shortcut(self) -> bool:
+        return self.type == "message_action"
 
 
 class CommonView(BaseModel):
@@ -158,15 +169,7 @@ class CreateDocSubmissionPayload(InteractionPayload):
     """
     Class containing fields we care about in Create Document View submission payload.
     """
-    class SlackTeam(BaseModel):
-        id: str
-
-    class SlackUser(BaseModel):
-        id: str
-
     view: CreateDocSubmissionView
-    team: SlackTeam
-    user: SlackUser
 
     def get_view_id(self) -> str:
         """
@@ -206,6 +209,105 @@ class CreateDocSubmissionPayload(InteractionPayload):
         return self.view.get_body_markdown()
 
 
+class ShortcutMessage(BaseModel):
+    """
+    Slack Message received in Message Short Payload.
+    """
+    TYPE_VALUE: ClassVar[str] = "message"
+
+    type: str
+    blocks: List[RichTextBlock]
+
+    @validator("type")
+    def validate_type(cls, v):
+        if v != ShortcutMessage.TYPE_VALUE:
+            raise ValueError(
+                f"Expected {ShortcutMessage.TYPE_VALUE} element type, got {v}")
+        return v
+
+    @validator("blocks")
+    def validate_blocks(cls, v):
+        # Even though this is a list, practically we observe only
+        # 1 element present in the shortcut payload.
+        if len(v) != 1:
+            raise ValueError(
+                f"Expected 1 element in 'blocks' attribute, got {v}")
+        return v
+
+    def get_rich_text_block(self) -> RichTextBlock:
+        """
+        Return Rich text block in message.
+        """
+        return self.blocks[0]
+
+    def get_markdown(self) -> str:
+        """
+        Return text in markdown format.
+        """
+        return self.get_rich_text_block().get_markdown()
+
+
+class MessageShortcutPayload(InteractionPayload):
+    """
+    Class containing fields we care about in the Message Shortcut payload.
+    """
+    CREATE_DOC_CALLBACK_ID: ClassVar[str] = 'create_doc_from_message'
+
+    message: ShortcutMessage
+    response_url: str
+    callback_id: str
+    trigger_id: str
+
+    def get_team_id(self) -> str:
+        """
+        Return ID of the Slack Workspace.
+        """
+        return self.team.id
+
+    def get_user_id(self) -> str:
+        """
+        Return ID of the Slack user trying to create the doc.
+        """
+        return self.user.id
+
+    def get_response_url(self) -> str:
+        """
+        Return Response URL associated with the payload.
+        """
+        return self.response_url
+
+    def get_trigger_id(self) -> str:
+        """
+        Return Trigger ID of the pyload.
+        """
+        return self.trigger_id
+
+    def get_callback_id(self) -> str:
+        """
+        Return Callback ID of the pyload. It is the identifier
+        for the Shortcut.
+        """
+        return self.callback_id
+
+    def is_create_doc_shortcut(self) -> bool:
+        """
+        Returns True if payload is for Create Doc Shortcut and False otherwise.
+        """
+        return self.callback_id == MessageShortcutPayload.CREATE_DOC_CALLBACK_ID
+
+    def get_rich_text_block(self) -> RichTextBlock:
+        """
+        Return Rich Text block in Message.
+        """
+        return self.message.get_rich_text_block()
+
+    def get_markdown(self) -> str:
+        """
+        Return shortcut message in markdown format.
+        """
+        return self.message.get_markdown()
+
+
 class CreateDocModalView:
     """
     Helper methods to manage Create Documentation Modal View.
@@ -221,7 +323,7 @@ class CreateDocModalView:
     BODY_ELEMENT_ACTION_ID = "create_doc_body_value"
 
     @staticmethod
-    def create_view() -> Dict:
+    def create_view(rich_text_block: RichTextBlock) -> Dict:
         """
         Creates Modal View from given Slash command Trigger ID and returns a Slack View object.
         View: https://api.slack.com/reference/surfaces/views#modal__modal-view-example
@@ -258,6 +360,7 @@ class CreateDocModalView:
                     "element": {
                         "type": "rich_text_input",
                         "action_id": CreateDocModalView.BODY_ELEMENT_ACTION_ID,
+                        "initial_value": rich_text_block.model_dump(),
                     }
                 }
             ],
