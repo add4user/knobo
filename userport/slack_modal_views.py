@@ -162,7 +162,7 @@ class CreateDocState(BaseModel):
 
 class CreateDocSubmissionView(CommonView):
     """
-    Create Document View submission.
+    Atttributes in View submission view.
     """
     state: CreateDocState
 
@@ -178,7 +178,7 @@ class CreateDocSubmissionView(CommonView):
 
 class CreateDocSubmissionPayload(InteractionPayload):
     """
-    Class containing fields we care about in Create Document View submission payload.
+    Attributes in Create Document View submission payload. 
     """
     view: CreateDocSubmissionView
 
@@ -410,13 +410,6 @@ class CreateDocModalView(BaseModalView):
         return CreateDocModalView.VIEW_TITLE
 
 
-class PlaceDocModalView(BaseModalView):
-    """
-    Class that takes asks user to assign placement of Documentation Section
-    in the previous view.
-    """
-
-
 def create_document_view(initial_body_value: RichTextBlock) -> CreateDocModalView:
     """
     Returns view for Create document with given initial value for section body.
@@ -455,4 +448,48 @@ def create_document_view(initial_body_value: RichTextBlock) -> CreateDocModalVie
         ],
         submit=PlainTextObject(text=CreateDocModalView.SUBMIT_TEXT),
         close=PlainTextObject(text=CreateDocModalView.CLOSE_TEXT),
+    )
+
+
+class PlaceDocModalView(BaseModalView):
+    """
+    Class that asks user to assign placement of Documentation Section
+    in the previous view.
+    """
+    VIEW_TITLE: ClassVar[str] = "Place Section"
+
+    SUBMIT_TEXT: ClassVar[str] = "Submit"
+    CLOSE_TEXT: ClassVar[str] = "Cancel"
+
+
+def place_document_view() -> PlaceDocModalView:
+    """
+    Returns Modal View to place created section from previous view.
+    """
+    return PlaceDocModalView(
+        title=PlainTextObject(text=PlaceDocModalView.VIEW_TITLE),
+        blocks=[
+            RichTextBlock(
+                block_id="place_doc_info",
+                elements=[
+                    RichTextSectionElement(
+                        elements=[
+                            RichTextObject(
+                                type=RichTextObject.TYPE_TEXT,
+                                text="Please select where you want to place this new section in the documentation." +
+                                " Once selected, please click Submit. You can abort this operation by clicking Cancel."
+                            )
+                        ]
+                    )
+                ],
+            ),
+            InputBlock(
+                label=PlainTextObject(text="place_doc_heading"),
+                block_id="place_doc_block_id",
+                element=PlainTextInputElement(
+                    action_id="place_doc_action_value")
+            ),
+        ],
+        submit=PlainTextObject(text=PlaceDocModalView.SUBMIT_TEXT),
+        close=PlainTextObject(text=PlaceDocModalView.CLOSE_TEXT),
     )

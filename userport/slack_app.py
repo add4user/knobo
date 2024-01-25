@@ -3,14 +3,14 @@ import pprint
 import json
 import logging
 from enum import Enum
-from typing import Dict
+from typing import Dict, ClassVar
 from slack_sdk import WebClient
 from slack_sdk.webhook import WebhookClient
 from slack_sdk.web.slack_response import SlackResponse
 from dotenv import load_dotenv
 from flask import Blueprint, request, jsonify, g
 from userport.exceptions import APIException
-from pydantic import BaseModel
+from pydantic import BaseModel, validator
 from userport.slack_modal_views import (
     ViewCreatedResponse,
     CreateDocModalView,
@@ -19,7 +19,9 @@ from userport.slack_modal_views import (
     CreateDocSubmissionPayload,
     CancelPayload,
     MessageShortcutPayload,
-    create_document_view
+    PlaceDocModalView,
+    create_document_view,
+    place_document_view
 )
 from userport.slack_models import SlackUpload, SlackUploadStatus
 import userport.db
@@ -82,6 +84,25 @@ class SlashCommandRequest(BaseModel):
 class SlashCommandVisibility(Enum):
     PRIVATE = "ephemeral"
     PUBLIC = "in_channel"
+
+
+class ViewUpdateResponse(BaseModel):
+    """
+    Class to update View as HTTP response.
+
+    Rererence: https://api.slack.com/surfaces/modals#updating_response
+    """
+    ACTION_VALUE: ClassVar[str] = "update"
+
+    response_action: str = ACTION_VALUE
+    view: PlaceDocModalView
+
+    @validator("response_action")
+    def validate_type(cls, v):
+        if v != ViewUpdateResponse.ACTION_VALUE:
+            raise ValueError(
+                f"Expected {ViewUpdateResponse.ACTION_VALUE} as response_action value, got {v}")
+        return v
 
 
 def make_slash_command_response(visibility: SlashCommandVisibility, text: str):
@@ -190,8 +211,12 @@ def handle_interactive_endpoint():
                     heading = create_doc_payload.get_heading_markdown()
                     body = create_doc_payload.get_body_markdown()
 
-                    update_upload_in_background.delay(view_id, heading, body)
-                    return "", 200
+                    update_upload_in_background.delay(
+                        view_id, heading, body)
+
+                    view_update_response = ViewUpdateResponse(
+                        view=place_document_view())
+                    return view_update_response.model_dump(exclude_none=True), 200
 
     except Exception as e:
         print(f"Encountered error: {e} when parsing payload: {payload_dict}")
@@ -224,10 +249,10 @@ def create_modal_from_shortcut_in_background(create_doc_shortcut_json: str):
     user_id = create_doc_shortcut.get_user_id()
     team_id = create_doc_shortcut.get_team_id()
     shortcut_callback_id = create_doc_shortcut.get_callback_id()
-    view_id = view_response.get_id()
     response_url = create_doc_shortcut.get_response_url()
     channel_id = create_doc_shortcut.get_channel_id()
     message_ts = create_doc_shortcut.get_message_ts()
+    view_id = view_response.get_id()
     userport.db.create_slack_upload(creator_id=user_id, team_id=team_id, view_id=view_id,
                                     response_url=response_url, shortcut_callback_id=shortcut_callback_id,
                                     channel_id=channel_id, message_ts=message_ts)
