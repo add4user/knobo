@@ -410,9 +410,9 @@ class CreateDocModalView(BaseModalView):
         return CreateDocModalView.VIEW_TITLE
 
 
-class PlaceSectionModalView(BaseModalView):
+class PlaceDocModalView(BaseModalView):
     """
-    Class that takes asks user to assign placement of Section
+    Class that takes asks user to assign placement of Documentation Section
     in the previous view.
     """
 

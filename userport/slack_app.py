@@ -190,7 +190,7 @@ def handle_interactive_endpoint():
                     heading = create_doc_payload.get_heading_markdown()
                     body = create_doc_payload.get_body_markdown()
 
-                    complete_upload_in_background.delay(view_id, heading, body)
+                    update_upload_in_background.delay(view_id, heading, body)
                     return "", 200
 
     except Exception as e:
@@ -244,12 +244,24 @@ def delete_upload_in_background(view_id: str):
 
 
 @shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})
-def complete_upload_in_background(view_id: str, heading: str, text: str):
+def update_upload_in_background(view_id: str, heading: str, text: str):
     """
-    Complete Upload of document. We will ensure 
+    Update Upload with heaidng and body text in the background.
 
     Performed in Celery task so API call path can complete in less than 3s.
     """
+    userport.db.update_slack_upload_text(
+        view_id=view_id, heading=heading, text=text)
+
+
+@shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})
+def complete_upload_in_background(view_id: str):
+    """
+    Update Upload with status and perform section creation.
+
+    Performed in Celery task so API call path can complete in less than 3s.
+    """
+
     slack_upload: SlackUpload
     try:
         slack_upload = userport.db.get_slack_upload(view_id=view_id)
@@ -259,15 +271,9 @@ def complete_upload_in_background(view_id: str, heading: str, text: str):
         return
 
     if slack_upload.status != SlackUploadStatus.IN_PROGRESS:
+        # Send Webhook message once upload starts.
         webhook = WebhookClient(slack_upload.response_url)
         webhook.send(text="Documentation creation is in progress! I will ping you once it's done!",
                      response_type=SlashCommandVisibility.PRIVATE.value)
 
-        userport.db.update_slack_upload(
-            view_id=view_id, heading=heading, text=text)
-
-        # This part is just for debugging.
-        # slack_upload = userport.db.get_slack_upload(view_id=view_id)
-        # logging.info(slack_upload.text)
-
-    # TODO: Create Slack section in db and update slack upload.
+        userport.db.update_slack_upload_status(view_id=view_id)

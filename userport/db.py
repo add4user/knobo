@@ -321,23 +321,41 @@ def get_slack_upload(view_id: str) -> SlackUpload:
     return upload_model
 
 
-def update_slack_upload(view_id: str, heading: str, text: str):
+def update_slack_upload_text(view_id: str, heading: str, text: str):
     """
     Updates Slack upload with given View id with heading and text values. Throws exception if upload is not found.
     """
     uploads = _get_slack_uploads()
     if not uploads.find_one_and_update(
         {'view_id': view_id},
-        {'$set': {
-            'status': SlackUploadStatus.IN_PROGRESS,
-            'heading': heading,
-            'text': text,
-            'last_updated_time': _get_current_time(),
-        }
+        {
+            '$set': {
+                'heading': heading,
+                'text': text,
+                'last_updated_time': _get_current_time(),
+            }
         }
     ):
         raise NotFoundException(
-            f"No model found to update status with View ID: {view_id}")
+            f"No model found to update upload text with View ID: {view_id}")
+
+
+def update_slack_upload_status(view_id: str, upload_status: SlackUploadStatus):
+    """
+    Updates Slack upload with given View id with heading and text values. Throws exception if upload is not found.
+    """
+    uploads = _get_slack_uploads()
+    if not uploads.find_one_and_update(
+        {'view_id': view_id},
+        {
+            '$set': {
+                'status': upload_status,
+                'last_updated_time': _get_current_time(),
+            }
+        }
+    ):
+        raise NotFoundException(
+            f"No model found to update upload status with View ID: {view_id}")
 
 
 def delete_slack_upload(view_id: str):
