@@ -264,10 +264,15 @@ class MessageShortcutPayload(InteractionPayload):
     """
     CREATE_DOC_CALLBACK_ID: ClassVar[str] = 'create_doc_from_message'
 
+    class Channel(BaseModel):
+        id: str
+
     message: ShortcutMessage
     response_url: str
     callback_id: str
     trigger_id: str
+    channel: Channel
+    message_ts: str
 
     def get_team_id(self) -> str:
         """
@@ -299,6 +304,20 @@ class MessageShortcutPayload(InteractionPayload):
         for the Shortcut.
         """
         return self.callback_id
+
+    def get_message_ts(self) -> str:
+        """
+        Return Message ID of the pyload. It is the identifier
+        for the Message that the shortcut is derived from.
+        """
+        return self.message_ts
+
+    def get_channel_id(self) -> str:
+        """
+        Return Channel ID of the pyload. It is the identifier
+        for the Channel that the shortcut is derived from.
+        """
+        return self.channel.id
 
     def is_create_doc_shortcut(self) -> bool:
         """
@@ -389,6 +408,13 @@ class CreateDocModalView(BaseModalView):
         Helper to fetch Title of Create Documentation modal view.
         """
         return CreateDocModalView.VIEW_TITLE
+
+
+class PlaceSectionModalView(BaseModalView):
+    """
+    Class that takes asks user to assign placement of Section
+    in the previous view.
+    """
 
 
 def create_document_view(initial_body_value: RichTextBlock) -> CreateDocModalView:

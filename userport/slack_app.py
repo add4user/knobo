@@ -226,8 +226,11 @@ def create_modal_from_shortcut_in_background(create_doc_shortcut_json: str):
     shortcut_callback_id = create_doc_shortcut.get_callback_id()
     view_id = view_response.get_id()
     response_url = create_doc_shortcut.get_response_url()
+    channel_id = create_doc_shortcut.get_channel_id()
+    message_ts = create_doc_shortcut.get_message_ts()
     userport.db.create_slack_upload(creator_id=user_id, team_id=team_id, view_id=view_id,
-                                    response_url=response_url, shortcut_callback_id=shortcut_callback_id)
+                                    response_url=response_url, shortcut_callback_id=shortcut_callback_id,
+                                    channel_id=channel_id, message_ts=message_ts)
 
 
 @shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})
