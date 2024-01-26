@@ -7,7 +7,9 @@ from userport.slack_blocks import (
     PlainTextInputElement,
     RichTextInputElement,
     RichTextSectionElement,
-    RichTextObject
+    RichTextObject,
+    SelectMenuStaticElement,
+    SelectOptionObject
 )
 
 """
@@ -44,6 +46,9 @@ class InteractionPayload(BaseModel):
 
     def is_message_shortcut(self) -> bool:
         return self.type == "message_action"
+
+    def is_block_actions(self) -> bool:
+        return self.type == "block_actions"
 
 
 class CommonView(BaseModel):
@@ -101,6 +106,39 @@ class SubmissionPayload(InteractionPayload):
 
     def get_title(self) -> str:
         return self.view.get_title()
+
+
+class BlockActionsPayload(InteractionPayload):
+    """
+    Class containing fields we care about in a general Block Actions payload.
+    """
+    class GeneralAction(BaseModel):
+        action_id: str
+
+    actions: List[GeneralAction]
+
+    def is_page_selection_action_id(self) -> bool:
+        """
+        Returns True if page selection action ID, False otherwise.
+        """
+        return len(self.actions) > 0 and self.actions[0].action_id == PlaceDocModalView.PAGE_SELECTION_ACTION_ID
+
+
+class SelectMenuBlockActionsPayload(InteractionPayload):
+    """
+    Class containing fields we care about in the Select Menu based Block Actions payload.
+    """
+    class SelectMenuAction(BaseModel):
+        class SelectedOption(BaseModel):
+            text: TextObject
+            value: str
+
+        type: str
+        action_id: str
+        block_id: str
+        selected_option: SelectedOption
+
+    actions: List[SelectMenuAction]
 
 
 class CreateDocState(BaseModel):
@@ -340,7 +378,7 @@ class MessageShortcutPayload(InteractionPayload):
 
 class PlainTextObject(TextObject):
     """
-    Only Plain Text objects less than 24 characters in lenght allowed.
+    Only Plain Text objects less than 24 characters in length allowed.
     """
     type: str = "plain_text"
 
@@ -456,10 +494,21 @@ class PlaceDocModalView(BaseModalView):
     Class that asks user to assign placement of Documentation Section
     in the previous view.
     """
-    VIEW_TITLE: ClassVar[str] = "Place Section"
+    VIEW_TITLE: ClassVar[str] = "Select Location"
+
+    PAGE_SELECTION_LABEL_TEXT: ClassVar[str] = "Select Page"
+    PAGE_SELECTION_BLOCK_ID: ClassVar[str] = "page_selection_block_id"
+    PAGE_SELECTION_ACTION_ID: ClassVar[str] = "page_selection_action_id"
 
     SUBMIT_TEXT: ClassVar[str] = "Submit"
     CLOSE_TEXT: ClassVar[str] = "Cancel"
+
+    @staticmethod
+    def get_view_title() -> str:
+        """
+        Helper to fetch Title of Place Documentation modal view.
+        """
+        return PlaceDocModalView.VIEW_TITLE
 
 
 def place_document_view() -> PlaceDocModalView:
@@ -476,18 +525,33 @@ def place_document_view() -> PlaceDocModalView:
                         elements=[
                             RichTextObject(
                                 type=RichTextObject.TYPE_TEXT,
-                                text="Please select where you want to place this new section in the documentation." +
-                                " Once selected, please click Submit. You can abort this operation by clicking Cancel."
+                                text="Please select the Page where you want to add this section.\n\n" +
+                                     "If you select \"New Page\", then please provide a Page Title as well."
                             )
                         ]
-                    )
+                    ),
                 ],
             ),
             InputBlock(
-                label=PlainTextObject(text="place_doc_heading"),
-                block_id="place_doc_block_id",
-                element=PlainTextInputElement(
-                    action_id="place_doc_action_value")
+                label=PlainTextObject(
+                    text=PlaceDocModalView.PAGE_SELECTION_LABEL_TEXT),
+                block_id=PlaceDocModalView.PAGE_SELECTION_BLOCK_ID,
+                element=SelectMenuStaticElement(
+                    action_id=PlaceDocModalView.PAGE_SELECTION_ACTION_ID,
+                    options=[
+                        SelectOptionObject(
+                            text=TextObject(
+                                type=TextObject.TYPE_PLAIN_TEXT, text="New Page"),
+                            value="new_page_id",
+                        ),
+                        SelectOptionObject(
+                            text=TextObject(
+                                type=TextObject.TYPE_PLAIN_TEXT, text="FAQs"),
+                            value="xyz_id",
+                        )
+                    ]
+                ),
+                dispatch_action=True,
             ),
         ],
         submit=PlainTextObject(text=PlaceDocModalView.SUBMIT_TEXT),

@@ -15,7 +15,7 @@ class TextObject(BaseModel):
 
     Reference: https://api.slack.com/reference/block-kit/composition-objects#text
     """
-    TYPE_PLAIN_TEXT: ClassVar[str] = 'text'
+    TYPE_PLAIN_TEXT: ClassVar[str] = 'plain_text'
     TYPE_MARKDOWN: ClassVar[str] = 'mrkdwn'
 
     type: str
@@ -350,6 +350,36 @@ class RichTextInputElement(TextInputElement):
         return v
 
 
+class SelectOptionObject(BaseModel):
+    """
+    Represents an Option object to be used with Select Menu Element.
+
+    Reference: https://api.slack.com/reference/block-kit/composition-objects#option
+    """
+    text: TextObject
+    value: str
+
+
+class SelectMenuStaticElement(BaseModel):
+    """
+    Class representing Select Menu element using static source as input.
+
+    Reference: https://api.slack.com/reference/block-kit/block-elements#static_select
+    """
+    TYPE_VALUE: ClassVar[str] = 'static_select'
+
+    type: str = TYPE_VALUE
+    action_id: str
+    options: List[SelectOptionObject]
+
+    @validator("type")
+    def validate_type(cls, v):
+        if v != SelectMenuStaticElement.TYPE_VALUE:
+            raise ValueError(
+                f"Expected {SelectMenuStaticElement.TYPE_VALUE} as type value, got {v}")
+        return v
+
+
 class InputBlock(BaseModel):
     """
     Class representing Input Block.
@@ -361,7 +391,8 @@ class InputBlock(BaseModel):
     type: str = TYPE_VALUE
     label: TextObject
     block_id: str
-    element: TextInputElement
+    element: Union[TextInputElement, SelectMenuStaticElement]
+    dispatch_action: bool = False
 
     @validator("type")
     def validate_type(cls, v):

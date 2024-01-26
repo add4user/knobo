@@ -21,7 +21,9 @@ from userport.slack_modal_views import (
     MessageShortcutPayload,
     PlaceDocModalView,
     create_document_view,
-    place_document_view
+    place_document_view,
+    BlockActionsPayload,
+    SelectMenuBlockActionsPayload
 )
 from userport.slack_models import SlackUpload, SlackUploadStatus
 import userport.db
@@ -217,6 +219,11 @@ def handle_interactive_endpoint():
                     view_update_response = ViewUpdateResponse(
                         view=place_document_view())
                     return view_update_response.model_dump(exclude_none=True), 200
+        elif payload.is_block_actions():
+            if BlockActionsPayload(**payload_dict).is_page_selection_action_id():
+                select_menu_actions_payload = SelectMenuBlockActionsPayload(
+                    **payload_dict)
+                # TODO: Handle selection.
 
     except Exception as e:
         print(f"Encountered error: {e} when parsing payload: {payload_dict}")
