@@ -371,6 +371,7 @@ class SelectMenuStaticElement(BaseModel):
     type: str = TYPE_VALUE
     action_id: str
     options: List[SelectOptionObject]
+    initial_option: Optional[SelectOptionObject] = None
 
     @validator("type")
     def validate_type(cls, v):

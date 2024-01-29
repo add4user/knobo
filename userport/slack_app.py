@@ -22,6 +22,8 @@ from userport.slack_modal_views import (
     PlaceDocModalView,
     create_document_view,
     place_document_view,
+    place_document_with_new_page_title_input,
+    place_document_with_selected_page_option,
     BlockActionsPayload,
     SelectMenuBlockActionsPayload
 )
@@ -194,19 +196,25 @@ def handle_interactive_endpoint():
     try:
         payload = InteractionPayload(**payload_dict)
         if payload.is_message_shortcut():
+            # Handle Shortcut message.
             shortcut_payload = MessageShortcutPayload(**payload_dict)
             if shortcut_payload.is_create_doc_shortcut():
+                # User wants to add a section to the documentation.
                 create_modal_from_shortcut_in_background.delay(
                     shortcut_payload.model_dump_json())
         elif payload.is_view_interaction():
+            # Handle Modal View closing or submission.
             if payload.is_view_closed():
+                # User has closed the view.
                 cancel_payload = CancelPayload(**payload_dict)
                 view_id = cancel_payload.get_view_id()
 
                 delete_upload_in_background.delay(view_id)
 
             elif payload.is_view_submission():
+                # User has submitted the view.
                 if SubmissionPayload(**payload_dict).get_title() == CreateDocModalView.get_view_title():
+                    # The view submitted is the Create Section view.
                     create_doc_payload = CreateDocSubmissionPayload(
                         **payload_dict)
                     view_id = create_doc_payload.get_view_id()
@@ -216,14 +224,30 @@ def handle_interactive_endpoint():
                     update_upload_in_background.delay(
                         view_id, heading, body)
 
+                    # Return an updated view asking user where to place the added section.
                     view_update_response = ViewUpdateResponse(
                         view=place_document_view())
                     return view_update_response.model_dump(exclude_none=True), 200
         elif payload.is_block_actions():
+            # Handle Block Elements related updates within a view.
             if BlockActionsPayload(**payload_dict).is_page_selection_action_id():
+                # User has selected a Page to the add new section to.
                 select_menu_actions_payload = SelectMenuBlockActionsPayload(
                     **payload_dict)
-                # TODO: Handle selection.
+                if len(select_menu_actions_payload.actions) != 1:
+                    raise ValueError(
+                        f"Expected 1 action in payload, got {select_menu_actions_payload} instead")
+
+                selected_menu_action = select_menu_actions_payload.actions[0]
+                if PlaceDocModalView.is_create_new_page_action(selected_menu_action):
+                    # Return an updated view asking user for new page title input.
+                    update_view_with_new_page_title_in_background.delay(
+                        select_menu_actions_payload.model_dump_json(exclude_none=True))
+                else:
+                    # Return updated view with just menu options.
+                    # TODO: Make this a view dependent on the selected option here.
+                    update_view_with_place_document_selectec_page_in_background.delay(
+                        select_menu_actions_payload.model_dump_json(exclude_none=True))
 
     except Exception as e:
         print(f"Encountered error: {e} when parsing payload: {payload_dict}")
@@ -278,12 +302,46 @@ def delete_upload_in_background(view_id: str):
 @shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})
 def update_upload_in_background(view_id: str, heading: str, text: str):
     """
-    Update Upload with heaidng and body text in the background.
+    Update Upload with heading and body text in the background.
 
     Performed in Celery task so API call path can complete in less than 3s.
     """
     userport.db.update_slack_upload_text(
         view_id=view_id, heading=heading, text=text)
+
+
+@shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})
+def update_view_with_new_page_title_in_background(select_menu_block_actions_payload_json: str):
+    """
+    Update View asking user New page Title input in the background.
+
+    Performed in Celery task so API call path can complete in less than 3s.
+    """
+    select_menu_block_actions_payload = SelectMenuBlockActionsPayload(
+        **json.loads(select_menu_block_actions_payload_json))
+    web_client = get_slack_web_client()
+    web_client.views_update(
+        view_id=select_menu_block_actions_payload.get_view_id(),
+        hash=select_menu_block_actions_payload.get_view_hash(),
+        view=place_document_with_new_page_title_input().model_dump(exclude_none=True),
+    )
+
+
+@shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})
+def update_view_with_place_document_selectec_page_in_background(select_menu_block_actions_payload_json: str):
+    """
+    Update View showing user place document view with selected page.
+
+    Performed in Celery task so API call path can complete in less than 3s.
+    """
+    select_menu_block_actions_payload = SelectMenuBlockActionsPayload(
+        **json.loads(select_menu_block_actions_payload_json))
+    web_client = get_slack_web_client()
+    web_client.views_update(
+        view_id=select_menu_block_actions_payload.get_view_id(),
+        hash=select_menu_block_actions_payload.get_view_hash(),
+        view=place_document_with_selected_page_option().model_dump(exclude_none=True),
+    )
 
 
 @shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})
