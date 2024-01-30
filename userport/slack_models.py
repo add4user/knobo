@@ -206,15 +206,6 @@ class UpdateSlackSectionRequest(BaseUpdateSubRequest):
     next_section_id: Optional[str] = None
 
 
-class FindAndUpdateSlackSectionRequest(BaseModel):
-    """
-    Convenience class to allow methods to take both FindSlackSectionRequest
-    and UpdateSlackSectionRequest as inputs.
-    """
-    find_request: FindSlackSectionRequest
-    update_request: UpdateSlackSectionRequest
-
-
 class BaseUpdateRequest(BaseModel):
     """
     General update request format to MongoDB. This model

@@ -32,10 +32,7 @@ from userport.slack_modal_views import (
 from userport.slack_models import (
     SlackUpload,
     SlackUploadStatus,
-    SlackSection,
-    FindAndUpdateSlackSectionRequest,
-    FindSlackSectionRequest,
-    UpdateSlackSectionRequest
+    SlackSection
 )
 from bson.objectid import ObjectId
 from userport.utils import convert_to_markdown_heading
@@ -434,34 +431,8 @@ def create_new_page_in_background(view_id: str, new_page_title: str):
     )
 
     # Write sections to database.
-    # TODO: Check if sections are already in db and skip this step if needed.
-    page_id, child_id = userport.db.create_slack_page_and_section(
+    userport.db.create_slack_page_and_section(
         page_section=page_section, child_section=child_section)
-    logging.info(
-        f"Wrote page {page_id} and child {child_id} sections to database")
-
-    # Update the page and child links.
-    update_section_requests = [
-        FindAndUpdateSlackSectionRequest(
-            find_request=FindSlackSectionRequest(
-                id=ObjectId(page_id)
-            ),
-            update_request=UpdateSlackSectionRequest(
-                next_section_id=child_id,
-            )
-        ),
-        FindAndUpdateSlackSectionRequest(
-            find_request=FindSlackSectionRequest(
-                id=ObjectId(child_id)
-            ),
-            update_request=UpdateSlackSectionRequest(
-                prev_section_id=page_id,
-                parent_section_id=page_id
-            )
-        ),
-    ]
-    userport.db.update_slack_sections(
-        find_and_update_requests=update_section_requests)
 
     # TODO: Complete upload in background.
 

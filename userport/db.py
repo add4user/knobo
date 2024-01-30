@@ -23,7 +23,8 @@ from userport.slack_models import (
     UpdateSlackUploadRequest,
     BaseFindRequest,
     BaseUpdateSubRequest,
-    FindAndUpdateSlackSectionRequest
+    FindSlackSectionRequest,
+    UpdateSlackSectionRequest
 )
 from datetime import datetime, timezone
 from bson.objectid import ObjectId
@@ -403,9 +404,9 @@ def delete_slack_upload(view_id: str):
             f"Expected 1 Slack Upload with View ID: {view_id} to be deleted, got {result.deleted_count} deleted")
 
 
-def create_slack_page_and_section(page_section: SlackSection, child_section: SlackSection) -> (str, str):
+def create_slack_page_and_section(page_section: SlackSection, child_section: SlackSection):
     """
-    Create Page and Section in the database in a single transaction and return their string IDs.
+    Create Page and Section in the database in a single transaction.
 
     We assume that all attributes except creation and updation time are populated
     correctly by the application layer in the inputs.
@@ -425,33 +426,29 @@ def create_slack_page_and_section(page_section: SlackSection, child_section: Sla
             child_id = str(slack_sections.insert_one(
                 child_section.model_dump(exclude=_exclude_id())).inserted_id)
 
-            return page_id, child_id
+            # Update sections with parent-child relationship.
+            if not slack_sections.find_one_and_update(
+                _to_slack_find_request_dict(
+                    FindSlackSectionRequest(id=ObjectId(page_id))),
+                _to_slack_update_request_dict(
+                    update_sub_request=UpdateSlackSectionRequest(
+                        next_section_id=child_id,
+                    ))
+            ):
+                raise NotFoundException(
+                    f"Failed to find page Section for page ID: {page_id} and child_id: {child_id}")
 
-
-def update_slack_sections(find_and_update_requests: List[FindAndUpdateSlackSectionRequest]):
-    """
-    Update given sections transactionally.
-    """
-    import logging
-    slack_sections = _get_slack_sections()
-    client = _get_mongo_client()
-
-    with client.start_session() as session:
-        with session.start_transaction():
-            for request in find_and_update_requests:
-
-                logging.info("Logging requests to MongoDB")
-                logging.info(_to_slack_find_request_dict(request.find_request))
-                logging.info(_to_slack_find_request_dict(
-                    request.update_request))
-
-                if not slack_sections.find_one_and_update(
-                    _to_slack_find_request_dict(request.find_request),
-                    _to_slack_update_request_dict(
-                        update_sub_request=request.update_request)
-                ):
-                    raise NotFoundException(
-                        f"Failed to find and update Section for request: {request}")
+            if not slack_sections.find_one_and_update(
+                _to_slack_find_request_dict(
+                    FindSlackSectionRequest(id=ObjectId(child_id))),
+                _to_slack_update_request_dict(
+                    update_sub_request=UpdateSlackSectionRequest(
+                        parent_section_id=page_id,
+                        prev_section_id=page_id,
+                    ))
+            ):
+                raise NotFoundException(
+                    f"Failed to find child Section for child ID: {child_id} and page_id: {page_id}")
 
 
 def vector_search_sections(user_org_domain: str, query_vector_embedding: List[float], query_proper_nouns: List[str], document_limit: int) -> List[VectorSearchSectionResult]:
