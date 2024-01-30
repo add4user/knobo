@@ -357,7 +357,7 @@ def get_slack_upload_from_view_id(view_id: str) -> SlackUpload:
     upload_model: Optional[SlackUpload] = _model_from_dict(
         SlackUpload, uploads.find_one(_to_slack_find_request_dict(
             FindSlackUploadRequest(view_id=view_id))
-         ))
+        ))
     if upload_model == None:
         raise NotFoundException(
             f'No Slack Upload found for View ID: {view_id}')
@@ -450,7 +450,8 @@ def create_slack_page_and_section(page_section: SlackSection, child_section: Sla
                     FindSlackSectionRequest(id=ObjectId(page_id))),
                 _to_slack_update_request_dict(
                     update_sub_request=UpdateSlackSectionRequest(
-                        next_section_id=child_id,
+                        child_section_ids=[child_id],
+                        page_id=page_id,
                     ))
             ):
                 raise NotFoundException(
@@ -462,7 +463,7 @@ def create_slack_page_and_section(page_section: SlackSection, child_section: Sla
                 _to_slack_update_request_dict(
                     update_sub_request=UpdateSlackSectionRequest(
                         parent_section_id=page_id,
-                        prev_section_id=page_id,
+                        page_id=page_id,
                     ))
             ):
                 raise NotFoundException(

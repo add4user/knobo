@@ -143,16 +143,15 @@ class SlackSection(BaseModel):
     upload_id: str
     # Slack Workspace ID that the section is a part of.
     team_id: str = Field(...)
+    # ID of the page the section is part of.
+    page_id: str = Field(default="")
     # ID of the parent section and empty if root section of the page.
     # We store this to reconstruct the page correctly in the UI.
     # The order is determined by DFS starting from the top of the page.
     parent_section_id: str = Field(default="")
-    # ID of the previous section in the same page, empty for the first section in the page.
-    # The order is determined by DFS over the page starting from the top.
-    prev_section_id: str = Field(default="")
-    # ID of the next section in the same page, empty for the last section in the page.
-    # The order is determined by DFS over the page starting from the top.
-    next_section_id: str = Field(default="")
+    # Ordered child section IDs associatd with given section. Empty if there are no child sections.
+    # The ordering of section IDs is top-down i.e. earlier section IDs are above follwing sections in the page.
+    child_section_ids: List[str] = []
     # URL of the page the section is part of.
     url: str = Field(default="")
     # Heading of the section in Markdown format.
@@ -204,8 +203,8 @@ class UpdateSlackSectionRequest(BaseUpdateSubRequest):
     SlackSection attributes.
     """
     parent_section_id: Optional[str] = None
-    prev_section_id: Optional[str] = None
-    next_section_id: Optional[str] = None
+    child_section_ids: Optional[List[str]] = None
+    page_id: Optional[str] = None
 
 
 class BaseUpdateRequest(BaseModel):
