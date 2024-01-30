@@ -25,9 +25,20 @@ from userport.slack_modal_views import (
     place_document_with_new_page_title_input,
     place_document_with_selected_page_option,
     BlockActionsPayload,
-    SelectMenuBlockActionsPayload
+    SelectMenuBlockActionsPayload,
+    PlaceDocSubmissionPayload,
+    PlaceDocNewPageSubmissionPayload
 )
-from userport.slack_models import SlackUpload, SlackUploadStatus
+from userport.slack_models import (
+    SlackUpload,
+    SlackUploadStatus,
+    SlackSection,
+    FindAndUpdateSlackSectionRequest,
+    FindSlackSectionRequest,
+    UpdateSlackSectionRequest
+)
+from bson.objectid import ObjectId
+from userport.utils import convert_to_markdown_heading
 import userport.db
 from celery import shared_task
 
@@ -107,6 +118,25 @@ class ViewUpdateResponse(BaseModel):
             raise ValueError(
                 f"Expected {ViewUpdateResponse.ACTION_VALUE} as response_action value, got {v}")
         return v
+
+
+class UserInfoResponse(BaseModel):
+    """
+    Class with response from Slack User Info request.s
+
+    Reference: https://api.slack.com/methods/users.info#examples
+    """
+    class UserObject(BaseModel):
+        class UserProfile(BaseModel):
+            email: str
+        profile: UserProfile
+    user: UserObject
+
+    def get_email(self) -> str:
+        """
+        Return user's email.
+        """
+        return self.user.profile.email
 
 
 def make_slash_command_response(visibility: SlashCommandVisibility, text: str):
@@ -213,12 +243,13 @@ def handle_interactive_endpoint():
 
             elif payload.is_view_submission():
                 # User has submitted the view.
-                if SubmissionPayload(**payload_dict).get_title() == CreateDocModalView.get_view_title():
+                submission_payload = SubmissionPayload(**payload_dict)
+                if submission_payload.get_view_title() == CreateDocModalView.get_view_title():
                     # The view submitted is the Create Section view.
                     create_doc_payload = CreateDocSubmissionPayload(
                         **payload_dict)
                     view_id = create_doc_payload.get_view_id()
-                    heading = create_doc_payload.get_heading_markdown()
+                    heading = create_doc_payload.get_heading_plain_text()
                     body = create_doc_payload.get_body_markdown()
 
                     update_upload_in_background.delay(
@@ -228,6 +259,16 @@ def handle_interactive_endpoint():
                     view_update_response = ViewUpdateResponse(
                         view=place_document_view())
                     return view_update_response.model_dump(exclude_none=True), 200
+                elif submission_payload.get_view_title() == PlaceDocModalView.get_view_title():
+                    if PlaceDocSubmissionPayload(**payload_dict).is_new_page_submission():
+                        new_page_submission_payload = PlaceDocNewPageSubmissionPayload(
+                            **payload_dict)
+
+                        new_page_title = new_page_submission_payload.get_new_page_title()
+                        view_id = new_page_submission_payload.get_view_id()
+                        create_new_page_in_background.delay(
+                            view_id=view_id, new_page_title=new_page_title)
+
         elif payload.is_block_actions():
             # Handle Block Elements related updates within a view.
             if BlockActionsPayload(**payload_dict).is_page_selection_action_id():
@@ -246,7 +287,7 @@ def handle_interactive_endpoint():
                 else:
                     # Return updated view with just menu options.
                     # TODO: Make this a view dependent on the selected option here.
-                    update_view_with_place_document_selectec_page_in_background.delay(
+                    update_view_with_place_document_selected_page_in_background.delay(
                         select_menu_actions_payload.model_dump_json(exclude_none=True))
 
     except Exception as e:
@@ -328,7 +369,7 @@ def update_view_with_new_page_title_in_background(select_menu_block_actions_payl
 
 
 @shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})
-def update_view_with_place_document_selectec_page_in_background(select_menu_block_actions_payload_json: str):
+def update_view_with_place_document_selected_page_in_background(select_menu_block_actions_payload_json: str):
     """
     Update View showing user place document view with selected page.
 
@@ -342,6 +383,87 @@ def update_view_with_place_document_selectec_page_in_background(select_menu_bloc
         hash=select_menu_block_actions_payload.get_view_hash(),
         view=place_document_with_selected_page_option().model_dump(exclude_none=True),
     )
+
+
+@shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})
+def create_new_page_in_background(view_id: str, new_page_title: str):
+    """
+    Create New page and complete upload of the section in the background.
+    """
+    slack_upload: SlackUpload
+    try:
+        slack_upload = userport.db.get_slack_upload(view_id=view_id)
+    except userport.db.NotFoundException as e:
+        logging.error(
+            f"New page creation failed for View ID: {view_id} with error: {e}")
+        return
+
+    # Gather information from upload.
+    upload_id: str = slack_upload.id
+    team_id: str = slack_upload.team_id
+    creator_id: str = slack_upload.creator_id
+    section_heading_plain_text: str = slack_upload.heading_plain_text
+    section_text_markdown: str = slack_upload.text_markdown
+
+    # Get creator email.
+    web_client = get_slack_web_client()
+    slack_response: SlackResponse = web_client.users_info(user=creator_id)
+    creator_email: str = UserInfoResponse(
+        **slack_response.data).get_email()
+
+    # Create Slack Section for both section and page.
+    page_section = SlackSection(
+        upload_id=upload_id,
+        team_id=team_id,
+        creator_id=creator_id,
+        creator_email=creator_email,
+        updater_id=creator_id,
+        updater_email=creator_email,
+        heading=convert_to_markdown_heading(text=new_page_title, number=1)
+    )
+    child_section = SlackSection(
+        upload_id=upload_id,
+        team_id=team_id,
+        creator_id=creator_id,
+        creator_email=creator_email,
+        updater_id=creator_id,
+        updater_email=creator_email,
+        heading=convert_to_markdown_heading(
+            text=section_heading_plain_text, number=2),
+        text=section_text_markdown
+    )
+
+    # Write sections to database.
+    # TODO: Check if sections are already in db and skip this step if needed.
+    page_id, child_id = userport.db.create_slack_page_and_section(
+        page_section=page_section, child_section=child_section)
+    logging.info(
+        f"Wrote page {page_id} and child {child_id} sections to database")
+
+    # Update the page and child links.
+    update_section_requests = [
+        FindAndUpdateSlackSectionRequest(
+            find_request=FindSlackSectionRequest(
+                id=ObjectId(page_id)
+            ),
+            update_request=UpdateSlackSectionRequest(
+                next_section_id=child_id,
+            )
+        ),
+        FindAndUpdateSlackSectionRequest(
+            find_request=FindSlackSectionRequest(
+                id=ObjectId(child_id)
+            ),
+            update_request=UpdateSlackSectionRequest(
+                prev_section_id=page_id,
+                parent_section_id=page_id
+            )
+        ),
+    ]
+    userport.db.update_slack_sections(
+        find_and_update_requests=update_section_requests)
+
+    # TODO: Complete upload in background.
 
 
 @shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})

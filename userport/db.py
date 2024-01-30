@@ -14,7 +14,17 @@ from userport.models import (
     ChatMessageModel,
     MessageCreatorType
 )
-from userport.slack_models import SlackUpload, SlackUploadStatus
+from userport.slack_models import (
+    SlackUpload,
+    SlackUploadStatus,
+    SlackSection,
+    BaseUpdateRequest,
+    FindSlackUploadRequest,
+    UpdateSlackUploadRequest,
+    BaseFindRequest,
+    BaseUpdateSubRequest,
+    FindAndUpdateSlackSectionRequest
+)
 from datetime import datetime, timezone
 from bson.objectid import ObjectId
 from typing import Optional, Dict, List, Type
@@ -86,6 +96,21 @@ def _get_sections() -> Collection:
     helper to fetch the collection.
     """
     return _get_db()['sections']
+
+
+def _get_slack_sections() -> Collection:
+    """
+    Returns Slack Sections collection from database. All internal methods in this module should use this 
+    helper to fetch the collection.
+    """
+    return _get_db()['slack_sections']
+
+
+def _exclude_id() -> List[str]:
+    """
+    Helper to exclude ID during model_dump call.
+    """
+    return ['id']
 
 
 def _get_api_keys() -> Collection:
@@ -173,6 +198,20 @@ def _get_current_time() -> datetime:
     return datetime.now(tz=timezone.utc)
 
 
+def _to_slack_find_request_dict(find_request: BaseFindRequest) -> Dict:
+    """
+    Returns dictionary of find request for given SlackUpload.
+    """
+    return find_request.model_dump(by_alias=True, exclude_unset=True)
+
+
+def _to_slack_update_request_dict(update_sub_request: BaseUpdateSubRequest) -> Dict:
+    """
+    Returns dictionary of update request using given slack upload update request.
+    """
+    return BaseUpdateRequest(update_sub_request=update_sub_request).model_dump(by_alias=True, exclude_unset=True)
+
+
 def create_user_and_organization_transactionally(user_model: UserModel, organization_model: OrganizationModel):
     """
     Creates user document and Organization transactionally.
@@ -186,8 +225,9 @@ def create_user_and_organization_transactionally(user_model: UserModel, organiza
     organization_model.created = current_time
     organization_model.last_updated = current_time
 
-    user_model_dict = user_model.model_dump(exclude=['id'])
-    organization_model_dict = organization_model.model_dump(exclude=['id'])
+    user_model_dict = user_model.model_dump(exclude=_exclude_id())
+    organization_model_dict = organization_model.model_dump(
+        exclude=_exclude_id())
 
     users = _get_users()
     organizations = _get_organizations()
@@ -210,7 +250,7 @@ def create_upload(user_id: str, url: str) -> str:
     ), org_domain=user.org_domain, url=url, status=UploadStatus.IN_PROGRESS)
 
     uploads = _get_uploads()
-    result = uploads.insert_one(upload_model.model_dump(exclude=['id']))
+    result = uploads.insert_one(upload_model.model_dump(exclude=_exclude_id()))
     return str(result.inserted_id)
 
 
@@ -270,7 +310,7 @@ def insert_page_sections_transactionally(user_id: str, url: str, upload_id: str,
                 section_model = SectionModel(upload_id=upload_id, org_domain=user.org_domain, parent_section_id=parent_section_id, url=url, text=page_section.text, summary=page_section.summary, prev_sections_context=page_section.prev_sections_context,
                                              summary_vector_embedding=page_section.summary_vector_embedding, proper_nouns_in_section=page_section.proper_nouns_in_section, proper_nouns_in_doc=page_section.proper_nouns_in_doc, creator_id=user_id, created=current_time)
                 result = sections.insert_one(
-                    section_model.model_dump(exclude=['id']))
+                    section_model.model_dump(exclude=_exclude_id()))
                 section_id = str(result.inserted_id)
 
                 for child_page_section in page_section.child_sections:
@@ -304,7 +344,7 @@ def create_slack_upload(creator_id: str, team_id: str, view_id: str, response_ur
                          last_updated_time=current_time)
 
     slack_uploads = _get_slack_uploads()
-    result = slack_uploads.insert_one(upload.model_dump(exclude=['id']))
+    result = slack_uploads.insert_one(upload.model_dump(exclude=_exclude_id()))
     return str(result.inserted_id)
 
 
@@ -314,7 +354,8 @@ def get_slack_upload(view_id: str) -> SlackUpload:
     """
     uploads = _get_slack_uploads()
     upload_model: Optional[SlackUpload] = _model_from_dict(
-        SlackUpload, uploads.find_one({"view_id": view_id}))
+        SlackUpload, uploads.find_one(_to_slack_find_request_dict(
+            FindSlackUploadRequest(view_id=view_id))))
     if upload_model == None:
         raise NotFoundException(
             f'No Slack Upload found for View ID: {view_id}')
@@ -327,14 +368,10 @@ def update_slack_upload_text(view_id: str, heading: str, text: str):
     """
     uploads = _get_slack_uploads()
     if not uploads.find_one_and_update(
-        {'view_id': view_id},
-        {
-            '$set': {
-                'heading': heading,
-                'text': text,
-                'last_updated_time': _get_current_time(),
-            }
-        }
+        _to_slack_find_request_dict(
+            FindSlackUploadRequest(view_id=view_id)),
+        _to_slack_update_request_dict(UpdateSlackUploadRequest(
+            heading_plain_text=heading, text_markdown=text, last_updated_time=_get_current_time()))
     ):
         raise NotFoundException(
             f"No model found to update upload text with View ID: {view_id}")
@@ -346,13 +383,10 @@ def update_slack_upload_status(view_id: str, upload_status: SlackUploadStatus):
     """
     uploads = _get_slack_uploads()
     if not uploads.find_one_and_update(
-        {'view_id': view_id},
-        {
-            '$set': {
-                'status': upload_status,
-                'last_updated_time': _get_current_time(),
-            }
-        }
+        _to_slack_find_request_dict(
+            FindSlackUploadRequest(view_id=view_id)),
+        _to_slack_update_request_dict(UpdateSlackUploadRequest(
+            upload_status=upload_status, last_updated_time=_get_current_time()))
     ):
         raise NotFoundException(
             f"No model found to update upload status with View ID: {view_id}")
@@ -367,6 +401,57 @@ def delete_slack_upload(view_id: str):
     if result.deleted_count != 1:
         raise NotFoundException(
             f"Expected 1 Slack Upload with View ID: {view_id} to be deleted, got {result.deleted_count} deleted")
+
+
+def create_slack_page_and_section(page_section: SlackSection, child_section: SlackSection) -> (str, str):
+    """
+    Create Page and Section in the database in a single transaction and return their string IDs.
+
+    We assume that all attributes except creation and updation time are populated
+    correctly by the application layer in the inputs.
+    """
+    current_time = _get_current_time()
+    page_section.created_time = current_time
+    page_section.last_updated_time = current_time
+    child_section.created_time = current_time
+    child_section.last_updated_time = current_time
+
+    slack_sections = _get_slack_sections()
+    client = _get_mongo_client()
+    with client.start_session() as session:
+        with session.start_transaction():
+            page_id = str(slack_sections.insert_one(
+                page_section.model_dump(exclude=_exclude_id())).inserted_id)
+            child_id = str(slack_sections.insert_one(
+                child_section.model_dump(exclude=_exclude_id())).inserted_id)
+
+            return page_id, child_id
+
+
+def update_slack_sections(find_and_update_requests: List[FindAndUpdateSlackSectionRequest]):
+    """
+    Update given sections transactionally.
+    """
+    import logging
+    slack_sections = _get_slack_sections()
+    client = _get_mongo_client()
+
+    with client.start_session() as session:
+        with session.start_transaction():
+            for request in find_and_update_requests:
+
+                logging.info("Logging requests to MongoDB")
+                logging.info(_to_slack_find_request_dict(request.find_request))
+                logging.info(_to_slack_find_request_dict(
+                    request.update_request))
+
+                if not slack_sections.find_one_and_update(
+                    _to_slack_find_request_dict(request.find_request),
+                    _to_slack_update_request_dict(
+                        update_sub_request=request.update_request)
+                ):
+                    raise NotFoundException(
+                        f"Failed to find and update Section for request: {request}")
 
 
 def vector_search_sections(user_org_domain: str, query_vector_embedding: List[float], query_proper_nouns: List[str], document_limit: int) -> List[VectorSearchSectionResult]:
@@ -476,7 +561,8 @@ def create_inference_result(if_result_model: InferenceResultModel):
     """
     if_result_model.created = _get_current_time()
     inference_results = _get_inference_results()
-    inference_results.insert_one(if_result_model.model_dump(exclude=['id']))
+    inference_results.insert_one(
+        if_result_model.model_dump(exclude=_exclude_id()))
 
 
 def write_inference_and_chat_messages_transactioanlly(if_result_model: InferenceResultModel,
@@ -497,11 +583,11 @@ def write_inference_and_chat_messages_transactioanlly(if_result_model: Inference
     with client.start_session() as session:
         with session.start_transaction():
             chat_messages.insert_one(
-                chat_message_user_model.model_dump(exclude=['id']))
+                chat_message_user_model.model_dump(exclude=_exclude_id()))
             bot_message_result = chat_messages.insert_one(
-                chat_message_bot_model.model_dump(exclude=['id']))
+                chat_message_bot_model.model_dump(exclude=_exclude_id()))
 
             if_result_model.chat_message_id = str(
                 bot_message_result.inserted_id)
             inference_results.insert_one(
-                if_result_model.model_dump(exclude=['id']))
+                if_result_model.model_dump(exclude=_exclude_id()))

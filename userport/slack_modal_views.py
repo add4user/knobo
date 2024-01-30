@@ -1,4 +1,4 @@
-from typing import ClassVar, List, Union
+from typing import ClassVar, List, Union, Dict
 from pydantic import BaseModel, validator
 from userport.slack_blocks import (
     RichTextBlock,
@@ -107,7 +107,10 @@ class SubmissionPayload(InteractionPayload):
     """
     view: CommonView
 
-    def get_title(self) -> str:
+    def get_view_title(self) -> str:
+        """
+        Get View Title of given View submission Payload.
+        """
         return self.view.get_title()
 
 
@@ -127,23 +130,26 @@ class BlockActionsPayload(InteractionPayload):
         return len(self.actions) > 0 and self.actions[0].action_id == PlaceDocModalView.PAGE_SELECTION_ACTION_ID
 
 
+class SelectedOptionText(BaseModel):
+    """
+    Text associated with selected option by user.
+    """
+    text: TextObject
+    value: str
+
+    def get_value(self) -> str:
+        return self.value
+
+
 class SelectMenuAction(BaseModel):
     """
     Class containing Select Menu Action attributes.
     Associated with SelectMenuBlockActionsPayload defined below.
     """
-
-    class SelectedOption(BaseModel):
-        text: TextObject
-        value: str
-
-        def get_value(self) -> str:
-            return self.value
-
     type: str
     action_id: str
     block_id: str
-    selected_option: SelectedOption
+    selected_option: SelectedOptionText
 
     def get_action_id(self) -> str:
         """
@@ -173,6 +179,25 @@ class SelectMenuBlockActionsPayload(InteractionPayload):
         return self.view.get_hash()
 
 
+class InputPlainTextValue(BaseModel):
+    """
+    Value input by user in plain text in a view.
+    """
+    TYPE_VALUE: ClassVar[str] = 'plain_text_input'
+    type: str
+    value: str
+
+    @validator("type")
+    def validate_type(cls, v):
+        if v != InputPlainTextValue.TYPE_VALUE:
+            raise ValueError(
+                f"Expected {InputPlainTextValue.TYPE_VALUE} as type value, got {v}")
+        return v
+
+    def get_value(self) -> str:
+        return self.value
+
+
 class CreateDocState(BaseModel):
     """
     State associated with Create Document view submission.
@@ -181,18 +206,7 @@ class CreateDocState(BaseModel):
     """
     class Values(BaseModel):
         class HeadingBlock(BaseModel):
-            class HeadingBlockValue(BaseModel):
-                type: str
-                value: str
-
-                @validator("type")
-                def validate_type(cls, v):
-                    if v != 'plain_text_input':
-                        raise ValueError(
-                            f"Expected 'plain_text_input' as type value for HeadingBlockValue, got {v}")
-                    return v
-
-            create_doc_heading_value: HeadingBlockValue
+            create_doc_heading_value: InputPlainTextValue
 
         class BodyBlock(BaseModel):
             class BodyBlockValue(BaseModel):
@@ -213,15 +227,14 @@ class CreateDocState(BaseModel):
 
     values: Values
 
-    def get_heading_markdown(self) -> str:
+    def get_heading_plain_text(self) -> str:
         """
-        Get heading as Markdown formatted text.
+        Get heading as plain text (unformatted).
 
-        We will convert it to a Heading 2 for now.
-        TODO: The heading number should be based on which section
-        the user wants to insert the text.
+        Unlike body, we won't format as Markdown because Heading tag (h1,h2 tc)
+        will depend on placement of the section within a page.
         """
-        return f'## {self.values.create_doc_heading.create_doc_heading_value.value}'
+        return self.values.create_doc_heading.create_doc_heading_value.value
 
     def get_body_markdown(self) -> str:
         """
@@ -239,8 +252,8 @@ class CreateDocSubmissionView(CommonView):
     def get_id(self) -> str:
         return self.id
 
-    def get_heading_markdown(self) -> str:
-        return self.state.get_heading_markdown()
+    def get_heading_plain_text(self) -> str:
+        return self.state.get_heading_plain_text()
 
     def get_body_markdown(self) -> str:
         return self.state.get_body_markdown()
@@ -277,11 +290,11 @@ class CreateDocSubmissionPayload(InteractionPayload):
         """
         return self.view.get_title()
 
-    def get_heading_markdown(self) -> str:
+    def get_heading_plain_text(self) -> str:
         """
         Get Heading as Markdown formatted text.
         """
-        return self.view.get_heading_markdown()
+        return self.view.get_heading_plain_text()
 
     def get_body_markdown(self) -> str:
         """
@@ -741,3 +754,72 @@ def place_document_with_selected_page_option() -> PlaceDocModalView:
     )
     place_doc_base_view.blocks.append(selection_input_block)
     return place_doc_base_view
+
+
+class PlaceDocSubmissionPayload(BaseModel):
+    """
+    Atttributes in view submission payload when a new section is placed in 
+    a page.
+    """
+    class PlaceDocSubmissionView(BaseModel):
+        class PlaceDocSubmissionState(BaseModel):
+            values: Dict[str, Dict]
+        state: PlaceDocSubmissionState
+
+    view: PlaceDocSubmissionView
+
+    def is_new_page_submission(self) -> bool:
+        """
+        Returns True if section should be created in new page and False otherwise.
+        """
+        for value in self.view.state.values:
+            if value == PlaceDocModalView.NEW_PAGE_TITLE_BLOCK_ID:
+                return True
+        return False
+
+
+class PlaceDocNewPageSubmissionPayload(BaseModel):
+    """
+    Atttributes in view submission payload when a new section is placed in 
+    a New page.
+    """
+    class PlaceDocNewPageSubmissionView(BaseModel):
+        class PlaceDocNewPageState(BaseModel):
+            class NewPageValues(BaseModel):
+                class PageSelectionBlock(BaseModel):
+                    class PageSelectionAction(BaseModel):
+                        selected_option: SelectedOptionText
+                        type: str
+
+                        @validator("type")
+                        def validate_type(cls, v):
+                            if v != 'static_select':
+                                raise ValueError(
+                                    f"Expected static_select element type, got {v}")
+                            return v
+
+                    page_selection_action_id: PageSelectionAction
+
+                class NewPageTitleBlock(BaseModel):
+                    new_page_title_action_id: InputPlainTextValue
+
+                page_selection_block_id: PageSelectionBlock
+                new_page_title_block_id: NewPageTitleBlock
+            values: NewPageValues
+
+        state: PlaceDocNewPageState
+        id: str
+
+    view: PlaceDocNewPageSubmissionView
+
+    def get_new_page_title(self) -> str:
+        """
+        Return new page title in plain text format.
+        """
+        return self.view.state.values.new_page_title_block_id.new_page_title_action_id.get_value()
+
+    def get_view_id(self) -> str:
+        """
+        Get view ID associated with the payload.        
+        """
+        return self.view.id

@@ -35,3 +35,13 @@ def generate_hash(key: str) -> str:
     """
     h = hashlib.shake_256(key.encode('utf-8'))
     return h.hexdigest(16)
+
+
+def convert_to_markdown_heading(text: str, number: int):
+    """
+    Convert text to Markdown heading with given number.
+    Number should be >= 1.
+    """
+    assert number >= 1, f"Expected heading number >=1, got {number}"
+    prefix = "#" * number
+    return f"{prefix} {text}"
