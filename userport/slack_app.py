@@ -389,7 +389,8 @@ def create_new_page_in_background(view_id: str, new_page_title: str):
     """
     slack_upload: SlackUpload
     try:
-        slack_upload = userport.db.get_slack_upload(view_id=view_id)
+        slack_upload = userport.db.get_slack_upload_from_view_id(
+            view_id=view_id)
     except userport.db.NotFoundException as e:
         logging.error(
             f"New page creation failed for View ID: {view_id} with error: {e}")
@@ -431,32 +432,36 @@ def create_new_page_in_background(view_id: str, new_page_title: str):
     )
 
     # Write sections to database.
-    userport.db.create_slack_page_and_section(
+    page_id, child_id = userport.db.create_slack_page_and_section(
         page_section=page_section, child_section=child_section)
 
-    # TODO: Complete upload in background.
+    # Complete upload in background.
+    complete_new_page_upload_in_background.delay(upload_id, page_id, child_id)
 
 
 @shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})
-def complete_upload_in_background(view_id: str):
+def complete_new_page_upload_in_background(upload_id: str, page_id: str, child_id: str):
     """
-    Update Upload with status and perform section creation.
+    Complete upload process so that the page and child sections can be indexed for retrieval.
 
     Performed in Celery task so API call path can complete in less than 3s.
     """
 
     slack_upload: SlackUpload
     try:
-        slack_upload = userport.db.get_slack_upload(view_id=view_id)
+        slack_upload = userport.db.get_slack_upload_from_id(
+            upload_id=upload_id)
     except userport.db.NotFoundException as e:
-        print(e)
-        print("Upload complete failed for View ID: ", view_id)
+        logging.error(
+            f"Upload complete failed for Upload ID: {upload_id} with error: {e}")
         return
 
     if slack_upload.status != SlackUploadStatus.IN_PROGRESS:
-        # Send Webhook message once upload starts.
+        # Send Webhook message since upload has started.
         webhook = WebhookClient(slack_upload.response_url)
         webhook.send(text="Documentation creation is in progress! I will ping you once it's done!",
                      response_type=SlashCommandVisibility.PRIVATE.value)
 
-        userport.db.update_slack_upload_status(view_id=view_id)
+        userport.db.update_slack_upload_status(
+            upload_id=upload_id, upload_status=SlackUploadStatus.IN_PROGRESS)
+        logging.info("Updated Upload Status to in progress successfully")

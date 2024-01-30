@@ -108,6 +108,8 @@ class FindSlackUploadRequest(BaseFindRequest):
     SlackUpload attributes.
     """
     view_id: Optional[str] = None
+    id: Optional[CustomPyObjectId] = Field(
+        serialization_alias="_id", default=None)
 
 
 class UpdateSlackUploadRequest(BaseUpdateSubRequest):

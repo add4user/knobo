@@ -349,17 +349,32 @@ def create_slack_upload(creator_id: str, team_id: str, view_id: str, response_ur
     return str(result.inserted_id)
 
 
-def get_slack_upload(view_id: str) -> SlackUpload:
+def get_slack_upload_from_view_id(view_id: str) -> SlackUpload:
     """
     Returns True if Slack Upload associated with given View ID is in progress and False otherwise.
     """
     uploads = _get_slack_uploads()
     upload_model: Optional[SlackUpload] = _model_from_dict(
         SlackUpload, uploads.find_one(_to_slack_find_request_dict(
-            FindSlackUploadRequest(view_id=view_id))))
+            FindSlackUploadRequest(view_id=view_id))
+         ))
     if upload_model == None:
         raise NotFoundException(
             f'No Slack Upload found for View ID: {view_id}')
+    return upload_model
+
+
+def get_slack_upload_from_id(upload_id: str) -> SlackUpload:
+    """
+    Returns True if Slack Upload associated with given View ID is in progress and False otherwise.
+    """
+    uploads = _get_slack_uploads()
+    upload_model: Optional[SlackUpload] = _model_from_dict(
+        SlackUpload, uploads.find_one(_to_slack_find_request_dict(
+            FindSlackUploadRequest(id=ObjectId(upload_id)))))
+    if upload_model == None:
+        raise NotFoundException(
+            f'No Slack Upload found for upload ID: {upload_id}')
     return upload_model
 
 
@@ -378,19 +393,22 @@ def update_slack_upload_text(view_id: str, heading: str, text: str):
             f"No model found to update upload text with View ID: {view_id}")
 
 
-def update_slack_upload_status(view_id: str, upload_status: SlackUploadStatus):
+def update_slack_upload_status(upload_id: str, upload_status: SlackUploadStatus):
     """
-    Updates Slack upload with given View id with heading and text values. Throws exception if upload is not found.
+    Updates Slack upload status with given Upload ID. Throws exception if upload is not found.
     """
     uploads = _get_slack_uploads()
     if not uploads.find_one_and_update(
         _to_slack_find_request_dict(
-            FindSlackUploadRequest(view_id=view_id)),
-        _to_slack_update_request_dict(UpdateSlackUploadRequest(
-            upload_status=upload_status, last_updated_time=_get_current_time()))
+            FindSlackUploadRequest(id=ObjectId(upload_id))
+        ),
+        _to_slack_update_request_dict(
+            UpdateSlackUploadRequest(
+                status=upload_status, last_updated_time=_get_current_time())
+        )
     ):
         raise NotFoundException(
-            f"No model found to update upload status with View ID: {view_id}")
+            f"No model found to update upload status with Upload ID: {upload_id}")
 
 
 def delete_slack_upload(view_id: str):
@@ -404,9 +422,9 @@ def delete_slack_upload(view_id: str):
             f"Expected 1 Slack Upload with View ID: {view_id} to be deleted, got {result.deleted_count} deleted")
 
 
-def create_slack_page_and_section(page_section: SlackSection, child_section: SlackSection):
+def create_slack_page_and_section(page_section: SlackSection, child_section: SlackSection) -> (str, str):
     """
-    Create Page and Section in the database in a single transaction.
+    Create Page and Section in the database in a single transaction and return their IDs.
 
     We assume that all attributes except creation and updation time are populated
     correctly by the application layer in the inputs.
@@ -449,6 +467,8 @@ def create_slack_page_and_section(page_section: SlackSection, child_section: Sla
             ):
                 raise NotFoundException(
                     f"Failed to find child Section for child ID: {child_id} and page_id: {page_id}")
+
+            return page_id, child_id
 
 
 def vector_search_sections(user_org_domain: str, query_vector_embedding: List[float], query_proper_nouns: List[str], document_limit: int) -> List[VectorSearchSectionResult]:
