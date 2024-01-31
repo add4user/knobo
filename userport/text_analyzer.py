@@ -30,7 +30,8 @@ class TextAnalyzer:
         if not inference:
             self.system_message = "You are a helpful assistant that answers questions in the most truthful manner possible."
         else:
-            self.system_message = "You are a helpful assistant that answers questions in the most truthful manner possible. You also provide concise answers so that users can easily comprehend the answer and then ask follow ups if required. "
+            self.system_message = "You are a helpful assistant that answers questions in the most truthful manner possible. " +\
+                "You also provide concise answers so that users can easily comprehend the answer and then ask follow ups if required. "
         self.json_mode_system_message = self.system_message + \
             " You output results in only JSON."
         self.no_answer_found_text = "I'm sorry, I don't know the answer to that question."
@@ -117,13 +118,14 @@ class TextAnalyzer:
 
         return self.process_proper_nouns(proper_nouns_list)
 
-    def generate_answer_to_user_query(self, user_query: str, relevant_text_list: List[str]) -> AnswerFromSectionsResult:
+    def generate_answer_to_user_query(self, user_query: str, relevant_text_list: List[str], markdown: bool = False) -> AnswerFromSectionsResult:
         """
         Generate answer to user query and relevant text list in JSON mode.
         Returns instance of the AnswerFromSectionsResult class after response validation.
         """
         prompt: str = self._create_answer_prompt(
-            user_query=user_query, relevant_text_list=relevant_text_list)
+            user_query=user_query, relevant_text_list=relevant_text_list, markdown=markdown)
+        logging.info(f"Answer prompt: {prompt}")
 
         result = AnswerFromSectionsResult(prompt=prompt)
 
@@ -259,7 +261,7 @@ class TextAnalyzer:
                 'Extract the proper nouns from this Markdown formatted text and return the result as an array.'
                 )
 
-    def _create_answer_prompt(self, user_query: str, relevant_text_list: List[str]) -> str:
+    def _create_answer_prompt(self, user_query: str, relevant_text_list: List[str], markdown: bool = False) -> str:
         """
         Helper to create answer from given user query and list of relevant text.
         """
@@ -277,10 +279,18 @@ class TextAnalyzer:
                                 '""\n\n')
         formatted_text_list.append(formatted_user_query)
 
-        prompt = ('Answer the User query using only the information in the Sections above.'
-                  ' Return the result as a JSON object with "information_found" as boolean field, "answer" as string field and "section_number" as int field.'
-                  ' The "information_found" field should be set to false if the answer is not contained in the Sections above.'
-                  ' Do not mention the the Section number in the "answer" field.')
+        prompt = ''
+        if not markdown:
+            prompt = ('Answer the User query using only the information in the Sections above.'
+                      ' Return the result as a JSON object with "information_found" as boolean field, "answer" as string field and "section_number" as int field.'
+                      ' The "information_found" field should be set to false if the answer is not contained in the Sections above.'
+                      ' Do not mention the the Section number in the "answer" field.')
+        else:
+            prompt = ('Answer the User query using only the information in the Sections above.'
+                      ' Return the result as a JSON object with "information_found" as boolean field, "answer" as string field and "section_number" as int field.'
+                      ' The "information_found" field should be set to false if the answer is not contained in the Sections above.'
+                      ' The "answer" field should be Markdown formatted text'
+                      ' Do not mention the the Section number in the "answer" field.')
         formatted_text_list.append(prompt)
         return "\n".join(formatted_text_list)
 

@@ -25,7 +25,8 @@ from userport.slack_models import (
     BaseUpdateSubRequest,
     FindSlackSectionRequest,
     UpdateSlackSectionRequest,
-    FindAndUpateSlackSectionRequest
+    FindAndUpateSlackSectionRequest,
+    VectorSearchSlackSectionResult
 )
 from datetime import datetime, timezone
 from bson.objectid import ObjectId
@@ -503,6 +504,62 @@ def write_slack_sections(find_and_update_requests: List[FindAndUpateSlackSection
                 ):
                     raise NotFoundException(
                         f"Failed to find Slack section for request: {request}")
+
+
+def vector_search_slack_sections(team_id: str, user_query_vector_embedding: List[float],
+                                 user_query_proper_nouns: List[str], document_limit: int) -> List[VectorSearchSlackSectionResult]:
+    """
+    Performs vector search to retrieve most relevant sections associated with given user query.
+    """
+    # Construct filters for team and proper nouns.
+    filters_list: List[Dict] = []
+    filters_list.append({
+        "team_id": team_id
+    })
+
+    if len(user_query_proper_nouns) > 0:
+        # For now we are ok if any one of the proper nouns in the list is found
+        # in a doc. Higher false negatives but hopefully the LLM pipeline can
+        # help remove the false negatives.
+        filters_list.append({
+            "proper_nouns_in_doc": {
+                "$in": user_query_proper_nouns
+            }
+        })
+
+    sections = _get_slack_sections()
+    pipeline = [
+        {
+            "$vectorSearch": {
+                "index": "slack_section_vector_index",
+                "path": "summary_vector_embedding",
+                "queryVector":  user_query_vector_embedding,
+                # Number must be between document limit and 10000.
+                # Documentation recommends ratio of 10 to 20 nearest neighbors for limit of 1 document.
+                "numCandidates": int(min(10000, 20*document_limit)),
+                "limit": document_limit,
+                "filter": {
+                    "$and": filters_list
+                }
+            },
+        },
+        {
+            "$project": {
+                '_id': 1,
+                'heading': 1,
+                'text': 1,
+                'score': {
+                    '$meta': 'vectorSearchScore'
+                }
+            }
+        }
+    ]
+    results = sections.aggregate(pipeline)
+
+    vss_results: List[VectorSearchSlackSectionResult] = []
+    for res in results:
+        vss_results.append(VectorSearchSlackSectionResult(**res))
+    return vss_results
 
 
 def vector_search_sections(user_org_domain: str, query_vector_embedding: List[float], query_proper_nouns: List[str], document_limit: int) -> List[VectorSearchSectionResult]:

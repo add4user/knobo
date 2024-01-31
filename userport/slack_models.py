@@ -218,6 +218,22 @@ class FindAndUpateSlackSectionRequest(BaseModel):
     update_request: UpdateSlackSectionRequest
 
 
+class VectorSearchSlackSectionResult(BaseModel):
+    """
+    Result of vector search over SlackSections.
+    It is an embedded model and does not have a collection of its own.
+    """
+    # ID of the section. To get other fields of the section, we can just
+    # do another read during analysis to pull that information.
+    id: Optional[PyObjectId] = Field(alias="_id", default=None)
+    # Markdown formatted heading of the section.
+    heading: str = Field(...)
+    # Markdown formatted text associated with the section.
+    text: str = Field(...)
+    # Document score associated with search query (stored in parent model).
+    score: float = Field(...)
+
+
 class BaseUpdateRequest(BaseModel):
     """
     General update request format to MongoDB. This model

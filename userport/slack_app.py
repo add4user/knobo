@@ -12,6 +12,7 @@ from flask import Blueprint, request, jsonify, g
 from userport.exceptions import APIException
 from pydantic import BaseModel, validator
 from userport.slack_page_indexer import SlackPageIndexer
+from userport.slack_inference import SlackInference
 from userport.slack_modal_views import (
     ViewCreatedResponse,
     CreateDocModalView,
@@ -91,6 +92,7 @@ class SlashCommandRequest(BaseModel):
     response_url: str
     team_id: str
     user_id: str
+    text: str
 
 
 class SlashCommandVisibility(Enum):
@@ -185,6 +187,17 @@ def handle_slash_command():
             # Do nothing since we don't need this Slash command for now.
             # TODO: clean up handler.
             return "", 200
+        elif slash_command_request.command == '/knobo-ask':
+            # pprint.pprint(request.form)
+            user_query: str = slash_command_request.text
+            if len(user_query) == 0:
+                return "You forgot to ask a question after the command. Please try again!", 200
+            team_id: str = slash_command_request.team_id
+            response_url: str = slash_command_request.response_url
+
+            answer_user_query_in_background.delay(
+                user_query, team_id, response_url)
+            return f"{user_query}\n\nAnswering...please wait.", 200
     except Exception as e:
         print(
             f"Got error: {e} when handling slash command request: {request.form}")
@@ -292,6 +305,22 @@ def handle_interactive_endpoint():
         return interal_error_message, 200
 
     return "", 200
+
+
+@shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})
+def answer_user_query_in_background(user_query: str, team_id: str, response_url: str):
+    slack_inference = SlackInference()
+    inference_answer: str = slack_inference.answer(
+        user_query=user_query, team_id=team_id)
+
+    # Send formatted message.
+    logging.info(f"Inference answer {inference_answer}")
+
+    # Send webhook message.
+    # TODO: Update to formatted text message instead.
+    webhook = WebhookClient(response_url)
+    webhook.send(text=inference_answer,
+                 response_type=SlashCommandVisibility.PRIVATE.value)
 
 
 @shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})
@@ -456,9 +485,9 @@ def complete_new_page_upload_in_background(upload_id: str, page_id: str):
             f"Upload complete failed for Upload ID: {upload_id} with error: {e}")
         return
 
+    webhook = WebhookClient(slack_upload.response_url)
     if slack_upload.status != SlackUploadStatus.IN_PROGRESS:
         # Send Webhook message since upload has started.
-        webhook = WebhookClient(slack_upload.response_url)
         webhook.send(text="Documentation creation is in progress! I will ping you once it's done!",
                      response_type=SlashCommandVisibility.PRIVATE.value)
 
