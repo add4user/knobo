@@ -24,7 +24,8 @@ from userport.slack_models import (
     BaseFindRequest,
     BaseUpdateSubRequest,
     FindSlackSectionRequest,
-    UpdateSlackSectionRequest
+    UpdateSlackSectionRequest,
+    FindAndUpateSlackSectionRequest
 )
 from datetime import datetime, timezone
 from bson.objectid import ObjectId
@@ -470,6 +471,38 @@ def create_slack_page_and_section(page_section: SlackSection, child_section: Sla
                     f"Failed to find child Section for child ID: {child_id} and page_id: {page_id}")
 
             return page_id, child_id
+
+
+def get_slack_section(id: str) -> SlackSection:
+    """
+    Return SlackSection for given ID. Throws Exception if no section is found.
+    """
+    sections = _get_slack_sections()
+    got_section: Optional[SlackSection] = _model_from_dict(
+        SlackSection, sections.find_one(_to_slack_find_request_dict(
+            FindSlackSectionRequest(id=ObjectId(id)))
+        ))
+    if got_section == None:
+        raise NotFoundException(
+            f'No Slack Section found for ID: {id}')
+    return got_section
+
+
+def write_slack_sections(find_and_update_requests: List[FindAndUpateSlackSectionRequest]):
+    """
+    Write the given Slack sections transacationally.
+    """
+    sections = _get_slack_sections()
+    client = _get_mongo_client()
+    with client.start_session() as session:
+        with session.start_transaction():
+            for request in find_and_update_requests:
+                if not sections.find_one_and_update(
+                    _to_slack_find_request_dict(request.find_request),
+                    _to_slack_update_request_dict(request.update_request)
+                ):
+                    raise NotFoundException(
+                        f"Failed to find Slack section for request: {request}")
 
 
 def vector_search_sections(user_org_domain: str, query_vector_embedding: List[float], query_proper_nouns: List[str], document_limit: int) -> List[VectorSearchSectionResult]:

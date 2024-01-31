@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 from flask import Blueprint, request, jsonify, g
 from userport.exceptions import APIException
 from pydantic import BaseModel, validator
+from userport.slack_page_indexer import SlackPageIndexer
 from userport.slack_modal_views import (
     ViewCreatedResponse,
     CreateDocModalView,
@@ -34,7 +35,6 @@ from userport.slack_models import (
     SlackUploadStatus,
     SlackSection
 )
-from bson.objectid import ObjectId
 from userport.utils import convert_to_markdown_heading
 import userport.db
 from celery import shared_task
@@ -436,11 +436,11 @@ def create_new_page_in_background(view_id: str, new_page_title: str):
         page_section=page_section, child_section=child_section)
 
     # Complete upload in background.
-    complete_new_page_upload_in_background.delay(upload_id, page_id, child_id)
+    complete_new_page_upload_in_background.delay(upload_id, page_id)
 
 
 @shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})
-def complete_new_page_upload_in_background(upload_id: str, page_id: str, child_id: str):
+def complete_new_page_upload_in_background(upload_id: str, page_id: str):
     """
     Complete upload process so that the page and child sections can be indexed for retrieval.
 
@@ -465,3 +465,15 @@ def complete_new_page_upload_in_background(upload_id: str, page_id: str, child_i
         userport.db.update_slack_upload_status(
             upload_id=upload_id, upload_status=SlackUploadStatus.IN_PROGRESS)
         logging.info("Updated Upload Status to in progress successfully")
+
+    if slack_upload.status != SlackUploadStatus.COMPLETED:
+        # Index the page and associated section.
+        indexer = SlackPageIndexer()
+        indexer.run(page_id=page_id)
+
+        userport.db.update_slack_upload_status(
+            upload_id=upload_id, upload_status=SlackUploadStatus.COMPLETED)
+        logging.info("Updated Upload Status to in Completed successfully")
+
+    webhook.send(text="Documentation upload complete!",
+                 response_type=SlashCommandVisibility.PRIVATE.value)

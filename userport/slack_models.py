@@ -152,8 +152,6 @@ class SlackSection(BaseModel):
     # Ordered child section IDs associatd with given section. Empty if there are no child sections.
     # The ordering of section IDs is top-down i.e. earlier section IDs are above follwing sections in the page.
     child_section_ids: List[str] = []
-    # URL of the page the section is part of.
-    url: str = Field(default="")
     # Heading of the section in Markdown format.
     heading: str = Field(default="")
     # Text associated with section in Markdown format.
@@ -205,6 +203,19 @@ class UpdateSlackSectionRequest(BaseUpdateSubRequest):
     parent_section_id: Optional[str] = None
     child_section_ids: Optional[List[str]] = None
     page_id: Optional[str] = None
+    summary: Optional[str] = None
+    prev_sections_context: Optional[str] = None
+    summary_vector_embedding: Optional[List[float]] = None
+    proper_nouns_in_section: Optional[List[str]] = None
+    proper_nouns_in_doc: Optional[List[str]] = None
+
+
+class FindAndUpateSlackSectionRequest(BaseModel):
+    """
+    Wrapper class to find and update slack section.
+    """
+    find_request: FindSlackSectionRequest
+    update_request: UpdateSlackSectionRequest
 
 
 class BaseUpdateRequest(BaseModel):

@@ -4,6 +4,7 @@ from tenacity import retry, wait_random, stop_after_attempt
 from dataclasses import dataclass
 from nltk.stem import PorterStemmer
 import json
+import logging
 
 
 @dataclass
@@ -41,41 +42,43 @@ class TextAnalyzer:
         """
         return self.no_answer_found_text
 
-    def generate_detailed_summary_with_context(self, text: str, preceding_text: str):
+    def generate_detailed_summary_with_context(self, text: str, preceding_text: str, markdown: bool = False):
         """
         Generates detailed summary for given text using the text preceding it as context.
         """
         summary_prompt = self._create_detailed_summary_with_context_prompt(
-            text, preceding_text)
+            text=text, context=preceding_text, markdown=markdown)
 
         if self.debug:
-            print("Summary prompt with context:\n")
-            print(summary_prompt)
-            print("\n")
+            logging.info("Summary prompt with context:\n")
+            logging.info(summary_prompt)
+            logging.info("\n")
         return self._generate_response(summary_prompt)
 
-    def generate_detailed_summary(self, text: str) -> str:
+    def generate_detailed_summary(self, text: str, markdown: bool = False) -> str:
         """
         Generates detailed summary for given text.
         """
-        summary_prompt = self._create_summary_prompt(text)
+        summary_prompt = self._create_summary_prompt(
+            text=text, markdown=markdown)
 
         if self.debug:
-            print("Summary prompt:\n")
-            print(summary_prompt)
-            print("\n")
+            logging.info("Summary prompt:\n")
+            logging.info(summary_prompt)
+            logging.info("\n")
         return self._generate_response(summary_prompt)
 
-    def generate_concise_summary(self, text: str) -> str:
+    def generate_concise_summary(self, text: str, markdown: bool = False) -> str:
         """
         Generates concise summary for given text.
         """
-        concise_summary_prompt = self._create_concise_summary_prompt(text)
+        concise_summary_prompt = self._create_concise_summary_prompt(
+            text=text, markdown=markdown)
 
         if self.debug:
-            print("Concise Summary prompt:\n")
-            print(concise_summary_prompt)
-            print("\n")
+            logging.info("Concise Summary prompt:\n")
+            logging.info(concise_summary_prompt)
+            logging.info("\n")
         return self._generate_response(concise_summary_prompt)
 
     def generate_vector_embedding(self, text: str) -> List[float]:
@@ -85,17 +88,18 @@ class TextAnalyzer:
         return self.openai_manager.get_embedding(text)
 
     @retry(wait=wait_random(min=1, max=2), stop=stop_after_attempt(3))
-    def generate_proper_nouns(self, text: str) -> List[str]:
+    def generate_proper_nouns(self, text: str, markdown: bool = False) -> List[str]:
         """
         Generates proper nouns from given text and returns them
         as a list along with the stemmed versions.
         """
-        proper_nouns_prompt = self._create_proper_nouns_prompt(text)
+        proper_nouns_prompt = self._create_proper_nouns_prompt(
+            text=text, markdown=markdown)
 
         if self.debug:
-            print("Important entities prompt:\n")
-            print(proper_nouns_prompt)
-            print("\n")
+            logging.info("Important entities prompt:\n")
+            logging.info(proper_nouns_prompt)
+            logging.info("\n")
 
         json_response = self._generate_response(
             prompt=proper_nouns_prompt, json_response=True)
@@ -164,37 +168,66 @@ class TextAnalyzer:
         response = self.openai_manager.create_response(
             message=prompt, system_message=system_message, json_response=json_response)
         if self.debug:
-            print("Generated response:\n")
-            print(response)
-            print("\n")
+            logging.info("Generated response:\n")
+            logging.info(response)
+            logging.info("\n")
         return response
 
-    def _create_summary_prompt(self, text: str) -> str:
+    def _create_summary_prompt(self, text: str, markdown: bool = False) -> str:
         """
-        Helper to create a summary prompt.
+        Helper to create a summary prompt. The prompt is slightly different if
+        text is formatted as markdown.
         """
+        if not markdown:
+            return ('Text:\n'
+                    '"""\n'
+                    f'{text}\n'
+                    '"""\n\n'
+                    'Explain in detail.'
+                    )
+
         return ('Text:\n'
                 '"""\n'
                 f'{text}\n'
                 '"""\n\n'
-                'Explain in detail.'
+                'Explain the content in this text using only the information in the text. The text is Markdown formatted.'
                 )
 
-    def _create_concise_summary_prompt(self, text: str) -> str:
+    def _create_concise_summary_prompt(self, text: str, markdown: bool = False) -> str:
         """
         Helper to create a concise summary prompt.
         """
+        if not markdown:
+            return ('Text:\n'
+                    '"""\n'
+                    f'{text}\n'
+                    '"""\n\n'
+                    'This text is from sequential sections in a document. Explain it in a concise manner.'
+                    )
         return ('Text:\n'
                 '"""\n'
                 f'{text}\n'
                 '"""\n\n'
-                'This text is from sequential sections in a document. Explain it in a concise manner.'
+                'This Markdown formatted text is from sequential sections in a document. Explain its content in a concise manner.'
                 )
 
-    def _create_detailed_summary_with_context_prompt(self, text: str, context: str) -> str:
+    def _create_detailed_summary_with_context_prompt(self, text: str, context: str, markdown: bool = False) -> str:
         """
-        Helper to createsa detailed summary prompt for given text and context.
+        Helper to createsa detailed summary prompt for given text and context. The prompt is slightly different if
+        text is formatted as markdown.
         """
+        if not markdown:
+            return ('Preceding text:\n'
+                    '"""\n'
+                    f'{context}\n'
+                    '"""\n\n'
+                    'Current text:\n'
+                    '"""\n'
+                    f'{text}\n'
+                    '"""\n\n'
+                    'Explain in detail the current text using preceding text as context. The preceding text is the summary of previous sections in the document.'
+                    )
+
         return ('Preceding text:\n'
                 '"""\n'
                 f'{context}\n'
@@ -203,18 +236,27 @@ class TextAnalyzer:
                 '"""\n'
                 f'{text}\n'
                 '"""\n\n'
-                'Explain in detail the current text using preceding text as context. The preceding text is the summary of previous sections in the document.'
+                'Explain the content in the current text using preceding text as context. The current text is Markdown formatted. The preceding text is the summary of previous sections in the document.'
                 )
 
-    def _create_proper_nouns_prompt(self, text: str) -> str:
+    def _create_proper_nouns_prompt(self, text: str, markdown: bool = False) -> str:
         """
-        Helper to create important entities prompt for given text.
+        Helper to create important entities prompt for given text. The prompt is slightly different if
+        text is formatted as markdown.
         """
+        if not markdown:
+            return ('Text:\n'
+                    '"""\n'
+                    f'{text}\n'
+                    '"""\n\n'
+                    'Extract the proper nouns from this text and return the result as an array.'
+                    )
+
         return ('Text:\n'
                 '"""\n'
                 f'{text}\n'
                 '"""\n\n'
-                'Extract the proper nouns from this text and return the result as an array.'
+                'Extract the proper nouns from this Markdown formatted text and return the result as an array.'
                 )
 
     def _create_answer_prompt(self, user_query: str, relevant_text_list: List[str]) -> str:
