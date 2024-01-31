@@ -52,7 +52,7 @@ class SlackInference:
         relevant_text_list: List[str] = [
             self._get_combined_markdown_text(heading=section.heading, text=section.text) for section in relevant_sections]
         answerResult: AnswerFromSectionsResult = self.text_analyzer.generate_answer_to_user_query(
-            user_query=user_query, relevant_text_list=relevant_text_list)
+            user_query=user_query, relevant_text_list=relevant_text_list, markdown=True)
         logging.info(f"Information found: {answerResult.information_found}")
         logging.info(f"Chosen text: {answerResult.chosen_section_text}")
 

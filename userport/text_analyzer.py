@@ -289,7 +289,7 @@ class TextAnalyzer:
             prompt = ('Answer the User query using only the information in the Sections above.'
                       ' Return the result as a JSON object with "information_found" as boolean field, "answer" as string field and "section_number" as int field.'
                       ' The "information_found" field should be set to false if the answer is not contained in the Sections above.'
-                      ' The "answer" field should be Markdown formatted text'
+                      ' The "answer" field should be Markdown formatted text.'
                       ' Do not mention the the Section number in the "answer" field.')
         formatted_text_list.append(prompt)
         return "\n".join(formatted_text_list)
