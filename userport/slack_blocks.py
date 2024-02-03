@@ -31,6 +31,16 @@ class TextObject(BaseModel):
         return v
 
 
+class RichTextStyle(BaseModel):
+    """
+    Rich text style for inline element styling.
+    """
+    bold: Optional[bool] = None
+    italic: Optional[bool] = None
+    code: Optional[bool] = None
+    strike: Optional[bool] = None
+
+
 class RichTextObject(BaseModel):
     """
     Rich text object that can contain link and styling.
@@ -38,21 +48,9 @@ class RichTextObject(BaseModel):
     TYPE_TEXT: ClassVar[str] = 'text'
     TYPE_LINK: ClassVar[str] = 'link'
 
-    class TextStyle(BaseModel):
-        bold: Optional[bool] = None
-        italic: Optional[bool] = None
-        code: Optional[bool] = None
-        strike: Optional[bool] = None
-
-        @root_validator(pre=True)
-        def any_of(cls, values):
-            if not any(values):
-                raise ValueError('One of bold, italic or code have a value')
-            return values
-
     type: str
     text: str
-    style: Optional[TextStyle] = None
+    style: Optional[RichTextStyle] = None
     url: Optional[str] = None
 
     @validator("type")
@@ -71,6 +69,12 @@ class RichTextObject(BaseModel):
                 f'"url" attribute is not set even thought type is {RichTextObject.TYPE_LINK}')
         return values
 
+    def is_plain_text(self) -> bool:
+        """
+        Returns True if text is plain (no formatting) else False.
+        """
+        return self.style == None and self.type == RichTextObject.TYPE_TEXT
+
     def get_markdown(self) -> str:
         """
         Return text formatted as Markdown.
@@ -79,12 +83,12 @@ class RichTextObject(BaseModel):
 
         # Apply styling if any.
         if self.style:
+            if self.style.code:
+                text_val = f'`{text_val}`'
             if self.style.bold:
                 text_val = f'**{text_val}**'
             if self.style.italic:
                 text_val = f'*{text_val}*'
-            if self.style.code:
-                text_val = f'`{text_val}`'
             if self.style.strike:
                 text_val = f'~{text_val}~'
 
@@ -246,8 +250,13 @@ class RichTextQuoteElement(BaseModel):
         text_values: List[str] = []
         for elem in self.elements:
             text_values.append(elem.get_markdown())
-        text_result = "".join(text_values)
-        return f'> {text_result}'
+        text_with_markdown = "".join(text_values)
+
+        # Split markdown text by new lines and prepend > for each line.
+        final_formatted_lines: List[str] = []
+        for line in text_with_markdown.split("\n"):
+            final_formatted_lines.append(f"> {line}")
+        return "\n".join(final_formatted_lines)
 
 
 class RichTextBlock(BaseModel):
@@ -274,24 +283,39 @@ class RichTextBlock(BaseModel):
         Return text formatted as Markdown.
         """
         text_values: List[str] = []
-        for elem in self.elements:
+        for i, elem in enumerate(self.elements):
             text: str
             if isinstance(elem, RichTextSectionElement):
                 text = RichTextSectionElement(
                     **elem.model_dump()).get_markdown()
             elif isinstance(elem, RichTextListElement):
-                text = RichTextListElement(**elem.model_dump()).get_markdown()
+                text = RichTextListElement(
+                    **elem.model_dump()).get_markdown()
             elif isinstance(elem, RichTextPreformattedElement):
+                # Unlike Section Element, a trailing \n has to be added manually so we can get the correct
+                # final string when we combine all section elements.
                 text = RichTextPreformattedElement(
                     **elem.model_dump()).get_markdown()
             elif isinstance(elem, RichTextQuoteElement):
+                # Unlike Section Element, a trailing \n has to be added manually so we can get the correct
+                # final string when we combine all section elements.
                 text = RichTextQuoteElement(
                     **elem.model_dump()).get_markdown()
             else:
                 raise ValueError(
                     f"Rich Text Element Type cannot be converted to markdown: {elem}")
+
+            if (i != len(self.elements) - 1) and \
+                    (isinstance(elem, RichTextListElement) or
+                     isinstance(elem, RichTextPreformattedElement) or
+                     isinstance(elem, RichTextQuoteElement)):
+                # Unlike Section Element, a trailing \n has to be added manually to other types of elements
+                # so we can get the correct final string when we combine all section elements.
+                # We do this only if this element is not the final element.
+                text = text + "\n"
+
             text_values.append(text)
-        return "\n".join(text_values)
+        return "".join(text_values)
 
 
 class TextInputElement(BaseModel):

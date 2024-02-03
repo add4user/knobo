@@ -38,19 +38,29 @@ class MarkdownToRichTextConverter:
         """
         markdown_lines = markdown_text.split("\n")
         for text in markdown_lines:
-            # if self._check_if_preformatted_elem(text):
-            #     print(f"{text} processed as preformatted element start/end.")
-            # elif self._check_if_within_preformatted_block(text):
-            #     print(f"{text} processed as preformatted block element.")
-            # elif self._check_if_block_quote_elem(text):
-            #     print(f"{text} processed as block quote element.")
-            # elif self._check_if_bullet_list_elem(text):
-            #     print(f"{text} processed as bullet list element.")
-            # elif self._check_if_ordered_list_elem(text):
-            #     print(f"{text} processed as orderd list element.")
-            # else:
-            #     self._process_as_section_elem(text)
-            self._create_text_objects(text)
+            if len(text) == 0:
+                # Since we have split by newlines, we add that back.
+                text = "\n"
+            if self._check_if_preformatted_elem(text):
+                continue
+            elif self._check_if_within_preformatted_block(text):
+                continue
+            elif self._check_if_block_quote_elem(text):
+                continue
+            elif self._check_if_bullet_list_elem(text):
+                continue
+            elif self._check_if_ordered_list_elem(text):
+                continue
+            else:
+                self._process_as_section_elem(text)
+
+        if self.current_element:
+            # Add current element to completed list.
+            self.completed_elements.append(self.current_element)
+
+        print("\nfinal block\n")
+
+        return RichTextBlock(elements=self.completed_elements)
 
     def _check_if_preformatted_elem(self, text: str) -> bool:
         """
@@ -62,10 +72,6 @@ class MarkdownToRichTextConverter:
         if not match:
             return False
 
-        print("Found preformatted item")
-        print("content: ", repr(match.group(0)))
-        print("\n")
-
         if self.current_element:
             # Add current element to completed list.
             self.completed_elements.append(self.current_element)
@@ -75,7 +81,8 @@ class MarkdownToRichTextConverter:
             self.current_element = None
         else:
             # Create a new preformatted element and assign it to the current element.
-            self.current_element = RichTextPreformattedElement(elements=[])
+            self.current_element = RichTextPreformattedElement(
+                elements=[], border=0)
 
         return True
 
@@ -95,9 +102,15 @@ class MarkdownToRichTextConverter:
 
         current_element: RichTextPreformattedElement = self.current_element
         if len(current_element.elements) == 0:
+            # Create a new element and append to elements.
             current_element.elements.append(RichTextObject(
                 type=RichTextObject.TYPE_TEXT, text=combined_text))
         else:
+            if not current_element.elements[-1].text.endswith("\n"):
+                # We need to prepend newline because each text within preformaated block is separated by newline
+                # so that the Slack Rich Text formatting is accurate. This should only be done
+                # if the previous character is not a newline character already.
+                combined_text = "\n" + combined_text
             current_element.elements[-1].text = current_element.elements[-1].text + combined_text
 
         return True
@@ -114,11 +127,11 @@ class MarkdownToRichTextConverter:
         if not match:
             return False
 
-        print("Found block quote item")
-        print("content: ", repr(match.group(1)))
-        print("\n")
-
         quote_content: str = match.group(1)
+        if len(quote_content) == 0:
+            # Empty content means its a newline since split text by newlines at the top.
+            quote_content = "\n"
+
         text_objects: List[RichTextObject] = self._create_text_objects(
             quote_content)
         if self.current_element and \
@@ -128,6 +141,18 @@ class MarkdownToRichTextConverter:
             assert len(
                 current_element.elements) > 0, f"Expected at least 1 element in RichTextQuoteElement, got {current_element}"
             last_elem: RichTextObject = current_element.elements[-1]
+
+            if not last_elem.text.endswith("\n"):
+                # We need to add a new line if the last elem text did not end with newline.
+                # This is because we separated text by newlines initially during parsing.
+                if last_elem.is_plain_text():
+                    last_elem.text = last_elem.text + "\n"
+                else:
+                    text_obj = RichTextObject(
+                        type=RichTextObject.TYPE_TEXT, text="\n")
+                    current_element.elements.append(text_obj)
+                    last_elem = text_obj
+
             for text_obj in text_objects:
                 if text_obj.is_plain_text() and last_elem.is_plain_text():
                     # Merge the text into the last plain text element.
@@ -156,11 +181,6 @@ class MarkdownToRichTextConverter:
         if not match:
             return False
 
-        print("Found ordered list item")
-        print("group 1: ", len(match.group(1)), " spaces")
-        print("group 2: ", match.group(2))
-        print("group 3: ", repr(match.group(3)))
-        print("\n")
         num_leading_spaces = len(match.group(1))
         list_number = int(match.group(2))
         list_content: str = match.group(3)
@@ -206,12 +226,6 @@ class MarkdownToRichTextConverter:
         if not match:
             return False
 
-        print("Found bulleted list item")
-        print("group 1: ", len(match.group(1)), " spaces")
-        print("group 2: ", match.group(2))
-        print("group 3: ", repr(match.group(3)))
-        print("\n")
-
         num_leading_spaces = len(match.group(1))
         list_content: str = match.group(3)
 
@@ -232,7 +246,7 @@ class MarkdownToRichTextConverter:
                 self.completed_elements.append(self.current_element)
 
             self.current_element = RichTextListElement(
-                style=RichTextListElement.STYLE_ORDERED,
+                style=RichTextListElement.STYLE_BULLET,
                 indent=indent,
                 elements=[]
             )
@@ -251,6 +265,18 @@ class MarkdownToRichTextConverter:
             assert len(
                 current_element.elements) > 0, f"Expected at least 1 element in RichTextSectionElement, got {current_element}"
             last_elem: RichTextObject = current_element.elements[-1]
+
+            if not last_elem.text.endswith("\n"):
+                # We need to add a new line if the last elem text did not end with newline.
+                # This is because we separated text by newlines initially during parsing.
+                if last_elem.is_plain_text():
+                    last_elem.text = last_elem.text + "\n"
+                else:
+                    text_obj = RichTextObject(
+                        type=RichTextObject.TYPE_TEXT, text="\n")
+                    current_element.elements.append(text_obj)
+                    last_elem = text_obj
+
             for text_obj in text_objects:
                 if text_obj.is_plain_text() and last_elem.is_plain_text():
                     # Merge the text into the last plain text element.
@@ -328,7 +354,6 @@ class MarkdownToRichTextConverter:
             all_text_objects.append(RichTextObject(
                 type=RichTextObject.TYPE_TEXT, text=plain_text))
 
-        pprint.pprint(all_text_objects)
         return all_text_objects
 
     def _get_non_overlapping_intervals(self, index_intervals: List[List[int]]) -> List[List[int]]:
@@ -425,13 +450,16 @@ if __name__ == "__main__":
     # markdown_text = '1. More complex list\n2. Another one\n    1. Three\n    2. Four [things](http://www.google.com) `that are` ~messed~ up\n        1. woops ***i got*** it\n\n\n1. Five\n    * Six\n    * Seven\n2. Eight\n'
     # markdown_text = '> Block a\n> \n> block between\n> Block b\n\n\n> Block C\n> Block D'
     # markdown_text = "quoting something now\n\n> What is this? \n> \n> We don't know the answer.\n\n* Take a leap of faith.\n* And try\nnew section again"
-    # markdown_text = '* bullet 1\n* bullet 2\n1. bullet number 1\n2. bullet number 2\n> block quote 1\n> block quote 2\n\n```\n\ncode block 1\ncode block 2\n\ncode block 3\n```\n* bullet again\n'
     # markdown_text = '1. hello there\n**tell** me more'
-    # markdown_text = '> formatting ~inside~ quote\n> \n> lets see `how it` looks like\n> \n> k\n'
 
-    markdown_text = 'ok this i***s ***[***just***](http://www.google.com) a\n\ns ***~ new~*** sectio**n o**k\n\na`nd` ***thenw*** h*a*t'
+    # Test case below for testing inline element converstion to text_objects.
+    # markdown_text = 'ok this i***s ***[***just***](http://www.google.com) a\n\ns ~new~ sectio**n o**k\n\na`nd` ***thenw*** h*a*t'
+    # markdown_text = '> formatting ~inside~ quote\n> \n> lets see ***`how it`*** looks like\n> \n> k'
+    # markdown_text = '```\n\n\nok bro\n```'
+    markdown_text = '* *bullet* 1\n* bullet **2**\n1. bullet number 1\n2. bullet number 2\n> block [quote 1](http://www.google.com)\n> [block](http://another%20link) quote 2\n\n```\n\ncode block 1\ncode block 2\n\ncode block 3\n```\n* bullet again'
     print(repr(markdown_text.split("\n")))
     print("\n\n")
 
     # pprint.pprint(markdown_text)
-    MarkdownToRichTextConverter().convert(markdown_text=markdown_text)
+    rich_text_block = MarkdownToRichTextConverter().convert(markdown_text=markdown_text)
+    pprint.pprint(rich_text_block.model_dump(exclude_none=True))
