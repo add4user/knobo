@@ -32,13 +32,6 @@ class MarkdownToRichTextConverter:
         self.current_element: Optional[Union[RichTextSectionElement, RichTextListElement,
                                              RichTextPreformattedElement, RichTextQuoteElement]] = None
 
-        # Regex patterns for inline styles.
-        self.BOLD_PATTERN = r'(?<!\\)\*\*(.+?)\*\*(?!\*)'
-        self.ITALIC_PATTERN = r'(?<!\*)\*([^*_]+?)\*(?!\*)'
-        self.CODE_PATTERN = r'`(.*?)`'
-        self.STRIKE_PATTERN = r'(?<!~|\\)~(.+?)~(?!~)'
-        self.LINK_PATTERN = r'(?<!\\])\[([^\]]+?)\]\(([^)]+?)\)(?!\))'
-
     def convert(self, markdown_text: str) -> RichTextBlock:
         """
         Convert given Markdown text into a RichTextBlock element and return it.
@@ -277,27 +270,33 @@ class MarkdownToRichTextConverter:
         """
         Returns a text object for every plain and styled substring of given text.
         The returned list of text objects are in order of text traversal.
+
+        Assumes that input text is content within a Markdown block element. This makes
+        the input text a Markdown inline element.
         """
         styled_index_intervals: List[List[str]] = []
 
-        bold_matches = re.finditer(pattern=self.BOLD_PATTERN, string=text)
+        bold_matches = re.finditer(
+            pattern=r'(?<!\\)\*\*(.+?)\*\*(?!\*)', string=text)
         for match in bold_matches:
             styled_index_intervals.append([match.start(), match.end()])
 
-        italic_matches = re.finditer(pattern=self.ITALIC_PATTERN, string=text)
+        italic_matches = re.finditer(
+            pattern=r'(?<!\*)\*([^*_]+?)\*(?!\*)', string=text)
         for match in italic_matches:
             styled_index_intervals.append([match.start(), match.end()])
 
-        code_matches = re.finditer(pattern=self.CODE_PATTERN, string=text)
+        code_matches = re.finditer(pattern=r'`(.+?)`', string=text)
         for match in code_matches:
             styled_index_intervals.append([match.start(), match.end()])
 
         strikethrough_matches = re.finditer(
-            pattern=self.STRIKE_PATTERN, string=text)
+            pattern=r'(?<!~|\\)~(.+?)~(?!~)', string=text)
         for match in strikethrough_matches:
             styled_index_intervals.append([match.start(), match.end()])
 
-        link_matches = re.finditer(pattern=self.LINK_PATTERN, string=text)
+        link_matches = re.finditer(
+            pattern=r'(?<!\\])\[([^\]]+?)\]\(([^)]+?)\)(?!\))', string=text)
         for match in link_matches:
             styled_index_intervals.append([match.start(), match.end()])
 
@@ -309,14 +308,11 @@ class MarkdownToRichTextConverter:
         for interval in non_overlapping_styled_intervals:
             start_pos, end_pos = interval
             plain_text = text[prev_end_pos:start_pos]
-            if len(plain_text) == 0:
-                prev_end_pos = end_pos
-                continue
-
-            # Create and append plain text object.
-            plain_text_object = RichTextObject(
-                type=RichTextObject.TYPE_TEXT, text=plain_text)
-            all_text_objects.append(plain_text_object)
+            if len(plain_text) > 0:
+                # Create and append plain text object.
+                plain_text_object = RichTextObject(
+                    type=RichTextObject.TYPE_TEXT, text=plain_text)
+                all_text_objects.append(plain_text_object)
 
             # Create and append styled object.
             styled_text: str = text[start_pos: end_pos]
