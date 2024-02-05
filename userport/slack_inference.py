@@ -1,7 +1,7 @@
 import logging
 from typing import List
-from userport.text_analyzer import TextAnalyzer, AnswerFromSectionsResult
 import userport.db
+from userport.text_analyzer import TextAnalyzer, AnswerFromSectionsResult
 from userport.slack_models import VectorSearchSlackSectionResult
 
 
@@ -18,6 +18,7 @@ class SlackInference:
     def answer(self, user_query: str, team_id: str) -> str:
         """
         Answer user query by using documentation found in the user's team.
+        The answer is Markdown formatted text.
         """
         # Fetch pronouns from given query text.
         user_query_proper_nouns: List[str] = self.text_analyzer.generate_proper_nouns(
@@ -51,6 +52,7 @@ class SlackInference:
         # Generate answer from LLM.
         relevant_text_list: List[str] = [
             self._get_combined_markdown_text(heading=section.heading, text=section.text) for section in relevant_sections]
+
         answerResult: AnswerFromSectionsResult = self.text_analyzer.generate_answer_to_user_query(
             user_query=user_query, relevant_text_list=relevant_text_list, markdown=True)
         logging.info(f"Information found: {answerResult.information_found}")

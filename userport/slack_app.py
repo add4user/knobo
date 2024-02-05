@@ -13,7 +13,7 @@ from userport.exceptions import APIException
 from pydantic import BaseModel, validator
 from userport.slack_page_indexer import SlackPageIndexer
 from userport.slack_inference import SlackInference
-from userport.slack_blocks import SectionBlock, TextObject
+from userport.slack_blocks import SectionBlock, TextObject, RichTextBlock
 from userport.slack_modal_views import (
     ViewCreatedResponse,
     CreateDocModalView,
@@ -32,6 +32,7 @@ from userport.slack_modal_views import (
     PlaceDocSubmissionPayload,
     PlaceDocNewPageSubmissionPayload
 )
+from userport.markdown_parser import MarkdownToRichTextConverter
 from userport.slack_models import (
     SlackUpload,
     SlackUploadStatus,
@@ -194,13 +195,11 @@ def handle_slash_command():
             if len(user_query) == 0:
                 return "You forgot to ask a question after the command. Please try again!", 200
             team_id: str = slash_command_request.team_id
-            response_url: str = slash_command_request.response_url
             channel_id: str = slash_command_request.channel_id
             user_id: str = slash_command_request.user_id
-            hardcoded_response: bool = True if 'create' in user_query else False
 
             answer_user_query_in_background.delay(
-                user_query, team_id, response_url, channel_id, user_id, hardcoded_response)
+                user_query, team_id, channel_id, user_id)
             return f"{user_query}\n\nAnswering...please wait.", 200
     except Exception as e:
         print(
@@ -313,25 +312,29 @@ def handle_interactive_endpoint():
 
 # @shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})
 @shared_task
-def answer_user_query_in_background(user_query: str, team_id: str, response_url: str, channel_id: str, user_id: str, hardcoded_response: bool):
+def answer_user_query_in_background(user_query: str, team_id: str, channel_id: str, user_id: str):
     slack_inference = SlackInference()
     inference_answer: str = slack_inference.answer(
         user_query=user_query, team_id=team_id)
 
     # Send formatted message.
     logging.info(f"Inference answer: {inference_answer}")
-    logging.info(f"Inference answer length: {len(inference_answer)}")
 
-    # Send webhook message.
-    # TODO: Fix formatting of image so we don't need harcoding.
+    # Convert to Slack RichTextBlock.
+    answer_rich_text_block: RichTextBlock = MarkdownToRichTextConverter().convert(
+        markdown_text=inference_answer)
+
+    logging.info(f"Inference Slack block: {answer_rich_text_block}")
+
+    # Post answer to user as a chat message.
     web_client = get_slack_web_client()
-    hardcoded_how_to_create_channel = 'To create a Slack channel on Desktop, follow these steps: \n1. From your sidebar, click the *Channels* header and select *Create a channel.*\n2. Give the channel a *name*, then click *Next*.\n3. Choose a channel type (<https://slack.com/help/articles/360017938993-What-is-a-channel#public-vsu46-private-channels|public or private>), then click *Create*.\n4. <https://slack.com/help/articles/201980108-Add-people-to-a-channel|Add people to the channel> or click *Skip for now*.'
-    hardcoded_slack_channel = 'Slack organizes conversations into dedicated spaces called *channels*. Channels bring order and clarity to work - you can create them for any project, topic, or team. With the right people and information in one place, teams can share ideas, make decisions, and move work forward.'
-    final_text = hardcoded_how_to_create_channel if hardcoded_response else hardcoded_slack_channel
-    web_client.chat_postEphemeral(channel=channel_id, user=user_id, blocks=[
-        SectionBlock(text=TextObject(
-            type=TextObject.TYPE_MARKDOWN, text=final_text)).model_dump(exclude_none=True),
-    ])
+    web_client.chat_postEphemeral(
+        channel=channel_id,
+        user=user_id,
+        blocks=[
+            answer_rich_text_block.model_dump(exclude_none=True)
+        ]
+    )
 
 
 @shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})
