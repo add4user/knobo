@@ -90,7 +90,7 @@ class RichTextObject(BaseModel):
             if self.style.italic:
                 text_val = f'*{text_val}*'
             if self.style.strike:
-                text_val = f'~{text_val}~'
+                text_val = f'~~{text_val}~~'
 
         # Add URL if any.
         if self.type == RichTextObject.TYPE_LINK:

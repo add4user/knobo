@@ -345,7 +345,7 @@ class MarkdownToRichTextConverter:
             styled_index_intervals.append([match.start(), match.end()])
 
         strikethrough_matches = re.finditer(
-            pattern=r'~(.+?)~', string=text)
+            pattern=r'~~(.+?)~~', string=text)
         for match in strikethrough_matches:
             styled_index_intervals.append([match.start(), match.end()])
 
@@ -447,7 +447,7 @@ class MarkdownToRichTextConverter:
             return text_object
 
         strikethrough_match = re.match(
-            pattern=r"~(.+)~", string=styled_text)
+            pattern=r"~~(.+)~~", string=styled_text)
         if strikethrough_match:
             strikethrough_text: str = strikethrough_match.group(1)
             if not text_object.style:
@@ -478,17 +478,17 @@ if __name__ == "__main__":
     # Test cases for testing inline element converstion to text_objects.
     # TODO: Move to unit test module to maintain the parser algorithm.
 
-    # markdown_text = '1. [What](http://link.com) a link\n2. I am trying ~***something***~ simple.\n\n\nok'
-    # markdown_text = 'ok this i***s ***[***just***](http://www.google.com) a\n\ns ~new~ sectio**n o**k\n\na`nd` ***thenw*** h*a*t'
-    # markdown_text = '> formatting ~inside~ quote\n> \n> lets see ***`how it`*** looks like\n> \n> k'
+    # markdown_text = '1. [What](http://link.com) a link\n2. I am trying ~~***something***~~ simple.\n\n\nok'
+    # markdown_text = 'ok this i***s ***[***just***](http://www.google.com) a\n\ns ~~new~~ sectio**n o**k\n\na`nd` ***thenw*** h*a*t'
+    # markdown_text = '> formatting ~~inside~~ quote\n> \n> lets see ***`how it`*** looks like\n> \n> k'
     # markdown_text = '```\n\n\nok bro\n```'
     # markdown_text = '* *bullet* 1\n* bullet **2**\n1. bullet number 1\n2. bullet number 2\n> block [quote 1](http://www.google.com)\n> [block](http://another%20link) quote 2\n\n```\n\ncode block 1\ncode block 2\n\ncode block 3\n```\n* bullet again'
     # markdown_text = '> Block a\n> \n> block between\n> Block b\n\n> Block C\n> Block D'
     # markdown_text = "quoting something now\n\n> What is this? \n> \n> We don't know the answer.\n\n* Take a leap of faith.\n* And try\nnew section again"
-    # markdown_text = '1. More complex list\n2. Another one\n    1. Three\n    2. Four [things](http://www.google.com) `that are` ~messed~ up\n        1. woops ***i got*** it\n\n\n1. Five\n    * Six\n    * Seven\n2. Eight'
+    # markdown_text = '1. More complex list\n2. Another one\n    1. Three\n    2. Four [things](http://www.google.com) `that are` ~~messed~~ up\n        1. woops ***i got*** it\n\n\n1. Five\n    * Six\n    * Seven\n2. Eight'
     # markdown_text = 'ok test italicizing\n1. hello bro\n\ndone\n\n* bullet'
-    # markdown_text = 'ok with quote **also**\n> hello\n\nok with ~*preformatted*~\n```\ncode block preformatted\n```\n* bullet bro'
-    # markdown_text = 'There is another thing we want to test\n1. hello ~in between~ ~buik ~~*brother*~ sister\n2. This [is ](http://www.google.com)[***a***](http://www.google.com) list\n    1. Sub list\n    2. Sub list <b>\n3. Thsi is the third elem\n\nWhat about unordered list:\n* Ek\n* Do'
+    # markdown_text = 'ok with quote **also**\n> hello\n\nok with ~~*preformatted*~~\n```\ncode block preformatted\n```\n* bullet bro'
+    # markdown_text = 'There is another thing we want to test\n1. hello ~~in between~~ ~~buik ~~~~*brother*~~ sister\n2. This [is ](http://www.google.com)[***a***](http://www.google.com) list\n    1. Sub list\n    2. Sub list <b>\n3. Thsi is the third elem\n\nWhat about unordered list:\n* Ek\n* Do'
 
     # This is the most complex example that we should definitely keep in the unit tests
     markdown_text = "**What is a DM?**\n\nDM is a `gimme code` ***Direct Message***. It's like a private 1:1 conversation between 2 people.\n\nHere is a code block:\n\n```\nx = 5\nx += 1\n```\n\nWhat about a list now?\n1. One\n    1. Two\n        1. Three\n            1. Four\n                1. Five\n            2. [Link mama](http://www.slack.com)\n2. Six\n    1. Seven\n* Bullet one\n    * Bullet 2\n        * Bullet 3\n\n> I'm being *blocking* from day 1\n> ok bro"
