@@ -97,6 +97,36 @@ class RichTextObject(BaseModel):
             text_val = f'[{text_val}]({self.url})'
         return text_val
 
+    def get_html(self, preformatted: bool = False) -> str:
+        """
+        Returns text formatted as HTML.
+
+        If part of preformatted block, just return text as is.
+        """
+        text_val = self.text
+
+        # Replace newlines with <br> for line breaks.
+        text_val = text_val.replace("\n", "<br>")
+
+        if preformatted:
+            return text_val
+
+        if self.style:
+            if self.style.code:
+                text_val = f'<code style="color:#f59b3a;background-color:#faf4f4">{text_val}</code>'
+            if self.style.bold:
+                text_val = f'<strong>{text_val}</strong>'
+            if self.style.italic:
+                text_val = f'<em>{text_val}</em>'
+            if self.style.strike:
+                text_val = f'<del>{text_val}</del>'
+
+        # Add URL if any.
+        if self.type == RichTextObject.TYPE_LINK:
+            text_val = f'<a href="{self.url}">{text_val}</a>'
+
+        return text_val
+
 
 class RichTextSectionElement(BaseModel):
     """
@@ -122,6 +152,16 @@ class RichTextSectionElement(BaseModel):
         for elem in self.elements:
             text_values.append(elem.get_markdown())
         return "".join(text_values)
+
+    def get_html(self) -> str:
+        """
+        Returns text formatted as HTML.
+        """
+        text_values: List[str] = []
+        for elem in self.elements:
+            text_values.append(elem.get_html())
+        res_text = "".join(text_values)
+        return f'<p>{res_text}</p>'
 
 
 class RichTextListElement(BaseModel):
@@ -193,11 +233,23 @@ class RichTextListElement(BaseModel):
         Return text formatted as Markdown.
         """
         text_values: List[str] = []
-        if self.style == RichTextListElement.STYLE_ORDERED:
+        if self.is_ordered_list():
             text_values = self._get_ordered_list_markdown()
-        elif self.style == RichTextListElement.STYLE_BULLET:
+        elif self.is_bullet_list():
             text_values = self._get_bullet_list_markdown()
         return "\n".join(text_values)
+
+    def is_ordered_list(self) -> bool:
+        """
+        Returns True if ordered list and False otherwise.
+        """
+        return self.style == RichTextListElement.STYLE_ORDERED
+
+    def is_bullet_list(self) -> bool:
+        """
+        Returns True if bullet list and False otherwise.
+        """
+        return self.style == RichTextListElement.STYLE_BULLET
 
 
 class RichTextPreformattedElement(BaseModel):
@@ -225,6 +277,16 @@ class RichTextPreformattedElement(BaseModel):
             text = f'```\n{elem.get_markdown()}\n```'
             text_values.append(text)
         return "".join(text_values)
+
+    def get_html(self) -> str:
+        """
+        Return text formatted as HTML.
+        """
+        text_values: List[str] = []
+        for elem in self.elements:
+            text = f'<code>{elem.get_html(preformatted=True)}</code>'
+            text_values.append(text)
+        return f'<pre style="background-color:lightgray;">{"".join(text_values)}</pre>'
 
 
 class RichTextQuoteElement(BaseModel):
@@ -257,6 +319,16 @@ class RichTextQuoteElement(BaseModel):
         for line in text_with_markdown.split("\n"):
             final_formatted_lines.append(f"> {line}")
         return "\n".join(final_formatted_lines)
+
+    def get_html(self) -> str:
+        """
+        Return text formatted as HTML.
+        """
+        text_values: List[str] = []
+        for elem in self.elements:
+            text_values.append(elem.get_html())
+        final_text = "".join(text_values)
+        return f"<blockquote style='border-left: 10px solid #ccc;margin: 1.5em 10px;padding: 0.5em 10px;'>{final_text}</blockquote>"
 
 
 class RichTextBlock(BaseModel):
@@ -316,6 +388,107 @@ class RichTextBlock(BaseModel):
 
             text_values.append(text)
         return "".join(text_values)
+
+    def get_html(self) -> str:
+        """
+        Return text formatted as HTML.
+        """
+        current_list_of_lists: List[RichTextListElement] = []
+        html_values = []
+        for elem in self.elements:
+            if isinstance(elem, RichTextSectionElement) or \
+                isinstance(elem, RichTextPreformattedElement) or \
+                    isinstance(elem, RichTextQuoteElement):
+                if len(current_list_of_lists) > 0:
+                    # Compute HTML and reset the list.
+                    html_values.append(
+                        self._get_html_from_list_of_lists(current_list_of_lists))
+                    current_list_of_lists = []
+                html_values.append(elem.get_html())
+            elif isinstance(elem, RichTextListElement):
+                current_list_of_lists.append(elem)
+            else:
+                raise ValueError(
+                    f"Invalid instance of element: {elem} cannot be converted to HTML")
+
+        # Close remaining open lists.
+        if len(current_list_of_lists) > 0:
+            # Compute HTML and reset the list.
+            html_values.append(
+                self._get_html_from_list_of_lists(current_list_of_lists))
+            current_list_of_lists = []
+        return "".join(html_values)
+
+    def _get_html_from_list_of_lists(self, list_of_lists: List[RichTextListElement]) -> str:
+        """
+        Helper to return HTML text for given list of rich text list elements.
+        """
+        assert len(list_of_lists) > 0, "Expected list of lists to not be empty"
+
+        first_list = list_of_lists[0]
+        html_values: List[str] = [self._create_new_open_list_html(first_list)]
+        open_lists: List[RichTextListElement] = [first_list]
+        for i in range(1, len(list_of_lists)):
+            cur_list = list_of_lists[i]
+            last_list = open_lists[-1]
+
+            if cur_list.indent > last_list.indent:
+                # Create a new list.
+                html_values.append(self._create_new_open_list_html(cur_list))
+                open_lists.append(cur_list)
+            else:
+                # Close all open lists that have larger indentation and add
+                # to the list with same indentation.
+                while len(open_lists) > 0:
+                    open_list_elem: RichTextListElement = open_lists[-1]
+                    if open_list_elem.indent > cur_list.indent:
+                        # Close this list.
+                        close_tag = '</ol>' if open_list_elem.is_ordered_list() else '</ul>'
+                        html_values.append(f"</li>{close_tag}")
+                        open_lists.pop()
+                    elif open_list_elem.indent == cur_list.indent:
+                        if open_list_elem.style != cur_list.style:
+                            # List style different at the same indentation, close the old one.
+                            close_tag = '</ol>' if open_list_elem.is_ordered_list() else '</ul>'
+                            html_values.append(f"</li>{close_tag}")
+                            open_lists.pop()
+
+                            # Create new list.
+                            html_values.append(self._create_new_open_list_html(
+                                cur_list, create_open_tag=True))
+                            open_lists.append(cur_list)
+                        else:
+                            # Add to existing list.
+                            html_values.append(self._create_new_open_list_html(
+                                cur_list, create_open_tag=False))
+                        break
+
+        # Close any remaining open lists.
+        while len(open_lists) > 0:
+            open_list_elem: RichTextListElement = open_lists.pop()
+            close_tag = '</ol>' if open_list_elem.is_ordered_list() else '</ul>'
+            html_values.append(f"</li>{close_tag}")
+
+        return "".join(html_values)
+
+    def _create_new_open_list_html(self, list_elem: RichTextListElement, create_open_tag: bool = True) -> str:
+        """
+        Returns HTML creating a new list and leaving the list open.
+        """
+        open_tag = '<ol>' if list_elem.is_ordered_list() else '<ul>'
+        list_text_values: List[str] = []
+        if create_open_tag:
+            list_text_values.append(open_tag)
+
+        for i in range(0, len(list_elem.elements)-1):
+            sec_elem: RichTextSectionElement = list_elem.elements[i]
+            list_text = f'<li>{sec_elem.get_html()}</li>'
+            list_text_values.append(list_text)
+
+        # Final element leave <li> as open tag since it may be appended to in the next list.
+        last_elem: RichTextSectionElement = list_elem.elements[-1]
+        list_text_values.append(f'<li>{last_elem.get_html()}')
+        return "".join(list_text_values)
 
 
 class TextInputElement(BaseModel):

@@ -32,6 +32,12 @@ class MarkdownToRichTextConverter:
         self.current_element: Optional[Union[RichTextSectionElement, RichTextListElement,
                                              RichTextPreformattedElement, RichTextQuoteElement]] = None
 
+    def get_html(self, markdown_text: str) -> str:
+        """
+        Convert given Markdown text into HTML.
+        """
+        return self.convert(markdown_text=markdown_text).get_html()
+
     def convert(self, markdown_text: str) -> RichTextBlock:
         """
         Convert given Markdown text into a RichTextBlock element and return it.
@@ -487,14 +493,16 @@ if __name__ == "__main__":
     # markdown_text = "quoting something now\n\n> What is this? \n> \n> We don't know the answer.\n\n* Take a leap of faith.\n* And try\nnew section again"
     # markdown_text = '1. More complex list\n2. Another one\n    1. Three\n    2. Four [things](http://www.google.com) `that are` ~~messed~~ up\n        1. woops ***i got*** it\n\n\n1. Five\n    * Six\n    * Seven\n2. Eight'
     # markdown_text = 'ok test italicizing\n1. hello bro\n\ndone\n\n* bullet'
-    # markdown_text = 'ok with quote **also**\n> hello\n\nok with ~~*preformatted*~~\n```\ncode block preformatted\n```\n* bullet bro'
+    markdown_text = 'ok with quote **also**\n> hello\n\nok with ~~*preformatted*~~\n```\ncode block preformatted\n```\n* bullet bro'
     # markdown_text = 'There is another thing we want to test\n1. hello ~~in between~~ ~~buik ~~~~*brother*~~ sister\n2. This [is ](http://www.google.com)[***a***](http://www.google.com) list\n    1. Sub list\n    2. Sub list <b>\n3. Thsi is the third elem\n\nWhat about unordered list:\n* Ek\n* Do'
 
     # This is the most complex example that we should definitely keep in the unit tests
-    markdown_text = "**What is a DM?**\n\nDM is a `gimme code` ***Direct Message***. It's like a private 1:1 conversation between 2 people.\n\nHere is a code block:\n\n```\nx = 5\nx += 1\n```\n\nWhat about a list now?\n1. One\n    1. Two\n        1. Three\n            1. Four\n                1. Five\n            2. [Link mama](http://www.slack.com)\n2. Six\n    1. Seven\n* Bullet one\n    * Bullet 2\n        * Bullet 3\n\n> I'm being *blocking* from day 1\n> ok bro"
-    print(repr(markdown_text.split("\n")))
-    print("\n\n")
+    # markdown_text = "**What is a DM?**\n\nDM is a `gimme code` ***Direct Message***. It's like a private 1:1 conversation between 2 people.\n\nHere is a code block:\n\n```\nx = 5\nx += 1\n```\n\nWhat about a list now?\n1. One\n    1. Two\n        1. Three\n            1. Four\n                1. Five\n            2. [Link mama](http://www.slack.com)\n2. Six\n    1. Seven\n* Bullet one\n    * Bullet 2\n        * Bullet 3\n\n> I'm being *blocking* from day 1\n> ok bro"
+    # print(repr(markdown_text.split("\n")))
+    # print("\n\n")
 
     # pprint.pprint(markdown_text)
-    rich_text_block = MarkdownToRichTextConverter().convert(markdown_text=markdown_text)
-    pprint.pprint(rich_text_block.model_dump(exclude_none=True))
+    # rich_text_block = MarkdownToRichTextConverter().convert(markdown_text=markdown_text)
+    # pprint.pprint(rich_text_block.model_dump(exclude_none=True))
+    print(MarkdownToRichTextConverter().get_html(
+        markdown_text=markdown_text))
