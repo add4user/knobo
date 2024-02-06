@@ -114,6 +114,20 @@ class IMMessageCreatedEventRequest(BaseModel):
     MESSAGE_TYPE: ClassVar[str] = 'message'
     IM_CHANNEL_TYPE: ClassVar[str] = 'im'
 
+    class Authorization(BaseModel):
+        is_bot: bool
+        user_id: str
+
+        @validator("is_bot")
+        def validate_is_bot(cls, v):
+            if not v:
+                raise ValueError(
+                    f"Expected is_bot to be true, got false")
+            return v
+
+        def get_user_id(self) -> str:
+            return self.user_id
+
     class Event(BaseModel):
         type: str
         team: str
@@ -136,6 +150,7 @@ class IMMessageCreatedEventRequest(BaseModel):
                     f"Expected {IMMessageCreatedEventRequest.IM_CHANNEL_TYPE} as channel type, got {v}")
             return v
 
+    authorizations: List[Authorization]
     event: Event
 
     def get_markdown_text(self) -> str:
@@ -148,21 +163,31 @@ class IMMessageCreatedEventRequest(BaseModel):
 
     def get_team_id(self) -> str:
         """
-        Return team ID of the given event request.
+        Returns team ID of the given event request.
         """
         return self.event.team
 
     def get_user_id(self) -> str:
         """
-        Return user ID of the given event request.
+        Returns user ID of the given event request.
         """
         return self.event.user
 
     def get_channel_id(self) -> str:
         """
-        Return channel ID of the event given requeest.
+        Returns channel ID of the event given requeest.
         """
         return self.event.channel
+
+    def is_created_by_human_user(self) -> bool:
+        """
+        Returns True if message is created by human user and False otherwise.
+        """
+        for auth in self.authorizations:
+            if auth.get_user_id() == self.get_user_id():
+                # Message created by bot.
+                return False
+        return True
 
 
 class SlashCommandRequest(BaseModel):
@@ -255,15 +280,17 @@ def handle_events():
         if event_request.is_message_created_event():
             message_event_request = IMMessageCreatedEventRequest(**data)
 
-            user_query: str = message_event_request.get_markdown_text()
-            team_id: str = message_event_request.get_team_id()
-            channel_id: str = message_event_request.get_channel_id()
-            user_id: str = message_event_request.get_user_id()
-            # Since this is already an IM message, we can generate a public response.
-            private_visibility: bool = False
+            if message_event_request.is_created_by_human_user():
+                user_query: str = message_event_request.get_markdown_text()
+                team_id: str = message_event_request.get_team_id()
+                channel_id: str = message_event_request.get_channel_id()
+                user_id: str = message_event_request.get_user_id()
+                # Since this is already an IM message, we can generate a public response.
+                private_visibility: bool = False
 
-            answer_user_query_in_background.delay(
-                user_query, team_id, channel_id, user_id, private_visibility)
+                answer_user_query_in_background.delay(
+                    user_query, team_id, channel_id, user_id, private_visibility)
+
     except Exception as e:
         print(f"Got error: {e} when handling slash command request: {data}")
 
@@ -432,7 +459,8 @@ def answer_user_query_in_background(user_query: str, team_id: str, channel_id: s
     else:
         # Post public message.
         # User user_id as channel argument for IMs per: https://api.slack.com/methods/chat.postMessage#app_home
-        # TODO: Change this once we can post public messages in channels as well (in addtion to just IMs)
+        # TODO: Change this once we can post public messages in channels as well (in addtion to just IMs). Be careful
+        # to not respond to bot posted messages and enter into a recursive loop like we observed in DMs.
         web_client.chat_postMessage(
             channel=user_id,
             blocks=[
