@@ -426,15 +426,3 @@ class InputBlock(BaseModel):
             raise ValueError(
                 f"Expected {InputBlock.TYPE_VALUE} as type value, got {v}")
         return v
-
-
-class SectionBlock(BaseModel):
-    """
-    Class representing Section Block.
-
-    Reference: https://api.slack.com/reference/block-kit/blocks#section
-    """
-    TYPE_VALUE: ClassVar[str] = 'section'
-
-    type: str = TYPE_VALUE
-    text: TextObject

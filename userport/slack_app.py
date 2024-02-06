@@ -3,7 +3,7 @@ import pprint
 import json
 import logging
 from enum import Enum
-from typing import Dict, ClassVar
+from typing import Dict, ClassVar, Optional, List
 from slack_sdk import WebClient
 from slack_sdk.webhook import WebhookClient
 from slack_sdk.web.slack_response import SlackResponse
@@ -13,7 +13,7 @@ from userport.exceptions import APIException
 from pydantic import BaseModel, validator
 from userport.slack_page_indexer import SlackPageIndexer
 from userport.slack_inference import SlackInference
-from userport.slack_blocks import SectionBlock, TextObject, RichTextBlock
+from userport.slack_blocks import RichTextBlock
 from userport.slack_modal_views import (
     ViewCreatedResponse,
     CreateDocModalView,
@@ -81,6 +81,88 @@ def verify_app_id(data):
     if os.environ.get("SLACK_API_APP_ID") != data['api_app_id']:
         raise APIException(
             status_code=403, message=f"Invalid App Id {data['api_app_id']}")
+
+
+class EventRequest(BaseModel):
+    """
+    Class that validates Events API Request.
+
+    Reference: https://api.slack.com/apis/connections/events-api#event-type-structure.
+    """
+    MESSAGE_TYPE: ClassVar[str] = 'message'
+
+    class Event(BaseModel):
+        type: str
+        subtype: Optional[str] = None
+        channel: str
+
+    event: Event
+
+    def is_message_created_event(self) -> bool:
+        """
+        Return True if message created event else False.
+        """
+        return self.event.type == EventRequest.MESSAGE_TYPE and self.event.subtype == None
+
+
+class IMMessageCreatedEventRequest(BaseModel):
+    """
+    Class that validates Events API Message Request.
+
+    Reference: https://api.slack.com/events/message.
+    """
+    MESSAGE_TYPE: ClassVar[str] = 'message'
+    IM_CHANNEL_TYPE: ClassVar[str] = 'im'
+
+    class Event(BaseModel):
+        type: str
+        team: str
+        user: str
+        channel: str
+        channel_type: str
+        blocks: List[RichTextBlock]
+
+        @validator("type")
+        def validate_type(cls, v):
+            if v != IMMessageCreatedEventRequest.MESSAGE_TYPE:
+                raise ValueError(
+                    f"Expected {IMMessageCreatedEventRequest.MESSAGE_TYPE} as type, got {v}")
+            return v
+
+        @validator("channel_type")
+        def validate_channel_type(cls, v):
+            if v != IMMessageCreatedEventRequest.IM_CHANNEL_TYPE:
+                raise ValueError(
+                    f"Expected {IMMessageCreatedEventRequest.IM_CHANNEL_TYPE} as channel type, got {v}")
+            return v
+
+    event: Event
+
+    def get_markdown_text(self) -> str:
+        """
+        Get message as markdown formatted text.
+        """
+        assert len(
+            self.event.blocks) == 1, f"Expected 1 text block in message, got {self.event.blocks}"
+        return self.event.blocks[0].get_markdown()
+
+    def get_team_id(self) -> str:
+        """
+        Return team ID of the given event request.
+        """
+        return self.event.team
+
+    def get_user_id(self) -> str:
+        """
+        Return user ID of the given event request.
+        """
+        return self.event.user
+
+    def get_channel_id(self) -> str:
+        """
+        Return channel ID of the event given requeest.
+        """
+        return self.event.channel
 
 
 class SlashCommandRequest(BaseModel):
@@ -166,9 +248,25 @@ def handle_events():
     if is_url_verification_request(data):
         # Return challenge field back to verify URL.
         return data['challenge'], 200
-
     verify_app_id(data)
-    pprint.pprint(data)
+
+    try:
+        event_request = EventRequest(**data)
+        if event_request.is_message_created_event():
+            message_event_request = IMMessageCreatedEventRequest(**data)
+
+            user_query: str = message_event_request.get_markdown_text()
+            team_id: str = message_event_request.get_team_id()
+            channel_id: str = message_event_request.get_channel_id()
+            user_id: str = message_event_request.get_user_id()
+            # Since this is already an IM message, we can generate a public response.
+            private_visibility: bool = False
+
+            answer_user_query_in_background.delay(
+                user_query, team_id, channel_id, user_id, private_visibility)
+    except Exception as e:
+        print(f"Got error: {e} when handling slash command request: {data}")
+
     return "", 200
 
 
@@ -186,20 +284,20 @@ def handle_slash_command():
 
     try:
         slash_command_request = SlashCommandRequest(**request.form)
-        if slash_command_request.command == '/knobo-create-doc':
-            # Do nothing since we don't need this Slash command for now.
-            # TODO: clean up handler.
-            return "", 200
-        elif slash_command_request.command == '/knobo-ask':
+        if slash_command_request.command == '/knobo-ask':
             user_query: str = slash_command_request.text
             if len(user_query) == 0:
                 return "You forgot to ask a question after the command. Please try again!", 200
             team_id: str = slash_command_request.team_id
             channel_id: str = slash_command_request.channel_id
             user_id: str = slash_command_request.user_id
+            # We need to call conversations.info to know type of channel
+            # https://api.slack.com/methods/conversations.info to decide
+            # if visibility is private or public.
+            private_visibility: bool = True
 
             answer_user_query_in_background.delay(
-                user_query, team_id, channel_id, user_id)
+                user_query, team_id, channel_id, user_id, private_visibility)
             return f"{user_query}\n\nAnswering...please wait.", 200
     except Exception as e:
         print(
@@ -310,31 +408,37 @@ def handle_interactive_endpoint():
     return "", 200
 
 
-# @shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})
-@shared_task
-def answer_user_query_in_background(user_query: str, team_id: str, channel_id: str, user_id: str):
+@shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})
+def answer_user_query_in_background(user_query: str, team_id: str, channel_id: str, user_id: str, private_visibility: bool):
     slack_inference = SlackInference()
     inference_answer: str = slack_inference.answer(
         user_query=user_query, team_id=team_id)
-
-    # Send formatted message.
-    logging.info(f"Inference answer: {inference_answer}")
 
     # Convert to Slack RichTextBlock.
     answer_rich_text_block: RichTextBlock = MarkdownToRichTextConverter().convert(
         markdown_text=inference_answer)
 
-    logging.info(f"Inference Slack block: {answer_rich_text_block}")
-
     # Post answer to user as a chat message.
     web_client = get_slack_web_client()
-    web_client.chat_postEphemeral(
-        channel=channel_id,
-        user=user_id,
-        blocks=[
-            answer_rich_text_block.model_dump(exclude_none=True)
-        ]
-    )
+    if private_visibility:
+        # Post ephemeral message.
+        web_client.chat_postEphemeral(
+            channel=channel_id,
+            user=user_id,
+            blocks=[
+                answer_rich_text_block.model_dump(exclude_none=True)
+            ]
+        )
+    else:
+        # Post public message.
+        # User user_id as channel argument for IMs per: https://api.slack.com/methods/chat.postMessage#app_home
+        # TODO: Change this once we can post public messages in channels as well (in addtion to just IMs)
+        web_client.chat_postMessage(
+            channel=user_id,
+            blocks=[
+                answer_rich_text_block.model_dump(exclude_none=True)
+            ]
+        )
 
 
 @shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})
