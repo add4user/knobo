@@ -541,6 +541,24 @@ def _dfs_over_sections_in_page(current_section: SlackSection, all_sections_dict:
         )
 
 
+def get_slack_pages_within_team(team_domain: str) -> List[SlackSection]:
+    """
+    Return all Slack pages for a given Team Domain.
+    """
+    sections = _get_slack_sections()
+
+    find_request_dict = _to_slack_find_request_dict(
+        FindSlackSectionRequest(team_domain=team_domain,
+                                parent_section_id="")
+    )
+    all_pages: List[SlackSection] = []
+    for slack_section_dict in sections.find(find_request_dict):
+        slack_section: SlackSection = _model_from_dict(
+            SlackSection, slack_section_dict)
+        all_pages.append(slack_section)
+    return all_pages
+
+
 def write_slack_sections(find_and_update_requests: List[FindAndUpateSlackSectionRequest]):
     """
     Write the given Slack sections transacationally.

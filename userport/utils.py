@@ -4,8 +4,9 @@ Helper methods for the application.
 import requests
 import hashlib
 import re
+from datetime import datetime
 from typing import List
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 
 def get_domain_from_email(email: str):
@@ -83,5 +84,8 @@ def create_documentation_url(host_name: str, team_domain: str, page_html_id: str
     return urljoin(host_name, f"{team_domain}/{page_html_id}/#{section_html_id}")
 
 
-if __name__ == "__main__":
-    get_heading_level_and_content('# Slack Channels')
+def to_day_format(datetime_obj: datetime) -> str:
+    """
+    Return datetime object formatted to YYYY-MM-DD.
+    """
+    return datetime_obj.strftime('%b %d, %Y')

@@ -123,7 +123,7 @@ class RichTextObject(BaseModel):
 
         # Add URL if any.
         if self.type == RichTextObject.TYPE_LINK:
-            text_val = f'<a href="{self.url}">{text_val}</a>'
+            text_val = f'<a href="{self.url}" target="_blank">{text_val}</a>'
 
         return text_val
 

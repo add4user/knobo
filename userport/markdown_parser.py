@@ -24,6 +24,9 @@ class MarkdownToRichTextConverter:
     """
 
     def __init__(self) -> None:
+        self._init_values()
+
+    def _init_values(self):
         # List of completed elements are stored in this list and later used to construct the final RichTextBlock.
         self.completed_elements: List[Union[RichTextSectionElement, RichTextListElement,
                                             RichTextPreformattedElement, RichTextQuoteElement]] = []
@@ -36,12 +39,14 @@ class MarkdownToRichTextConverter:
         """
         Convert given Markdown text into HTML.
         """
+        self._init_values()
         return self.convert(markdown_text=markdown_text).get_html()
 
     def convert(self, markdown_text: str) -> RichTextBlock:
         """
         Convert given Markdown text into a RichTextBlock element and return it.
         """
+        self._init_values()
         markdown_lines = markdown_text.split("\n")
         for text in markdown_lines:
             if len(text) == 0:

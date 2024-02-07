@@ -4,20 +4,20 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Userport Documentation</title>
-    <!-- <link
-      rel="stylesheet"
-      href="{{ url_for('static', filename='style.css') }}"
-    /> -->
+    <link rel="stylesheet" href="{{ stylesheet_url }}" />
     <link
       rel="stylesheet"
       href="https://fonts.googleapis.com/css?family=Roboto"
     />
   </head>
   <body>
-    <div id="left-nav">
-      <h2 id="company-name">Userport<h2>
-      <div id="doc-contents">Contents</div>
+    <div id="page-index-container">
+      <div id="team-name-container">
+        <h3 id="team-name">{{ team_name }} Pages</h3>
+      </div>
+      <div id="page-index">{{ page_index_html }}</div>
     </div>
-    <div id="main">{{ page_html }}</div>
+    <div id="page-content-container">{{ page_html }}</div>
+    <div id="gap-on-right-side"></div>
   </body>
 </html>

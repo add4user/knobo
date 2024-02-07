@@ -200,6 +200,7 @@ class FindSlackSectionRequest(BaseFindRequest):
     team_domain: Optional[str] = None
     html_section_id: Optional[str] = None
     page_id: Optional[str] = None
+    parent_section_id: Optional[str] = None
 
 
 class UpdateSlackSectionRequest(BaseUpdateSubRequest):

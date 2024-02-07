@@ -1,0 +1,81 @@
+/* Base Page styles */
+
+html {
+  height: 100%;
+}
+
+body {
+  letter-spacing: 0.5px;
+  font-family: "Roboto", sans-serif;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background-color: #efefef;
+
+  /* word and line height spacing */
+  word-spacing: 2px;
+  line-height: 25px;
+
+  display: flex;
+  flex-direction: row;
+  justify-content: start;
+}
+
+#page-index-container {
+  width: 30%;
+  border-right: 0.5px solid gray;
+  /* background-color: rgb(220, 220, 220); */
+  background-color: rgb(228, 226, 226);
+
+  display: flex;
+  flex-direction: column;
+  justify-content: start;
+}
+
+#team-name-container {
+  padding-top: 10%;
+  background-color: rgb(155, 185, 230);
+  border-bottom: 0.5px solid gray;
+}
+
+#team-name {
+  padding-left: 5%;
+}
+
+#page-index a {
+  text-decoration: none;
+}
+
+#page-content-container {
+  margin-left: 2%;
+  margin-right: 2%;
+
+  /* Ensure content is scrollable. */
+  overflow-y: auto;
+}
+
+#page-content {
+  /* width: 90%; */
+  padding-top: 2%;
+}
+
+#page-content > h1 {
+  border-bottom: 1px solid gray;
+  padding-bottom: 2%;
+}
+
+.last-updated-info-container {
+  display: flex;
+  justify-content: end;
+}
+
+.last-updated-info {
+  font-size: small;
+}
+
+#gap-on-right-side {
+  width: 20%;
+  /* background-color: rgb(220, 220, 220); */
+  background-color: rgb(228, 226, 226);
+}
