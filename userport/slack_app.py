@@ -1,3 +1,4 @@
+from markupsafe import escape
 import os
 import pprint
 import json
@@ -8,7 +9,7 @@ from slack_sdk import WebClient
 from slack_sdk.webhook import WebhookClient
 from slack_sdk.web.slack_response import SlackResponse
 from dotenv import load_dotenv
-from flask import Blueprint, request, jsonify, g
+from flask import Blueprint, request, jsonify, g, render_template
 from userport.exceptions import APIException
 from pydantic import BaseModel, validator
 from userport.slack_page_indexer import SlackPageIndexer
@@ -33,18 +34,22 @@ from userport.slack_modal_views import (
     PlaceDocNewPageSubmissionPayload
 )
 from userport.markdown_parser import MarkdownToRichTextConverter
+from userport.slack_html_gen import SlackHTMLGenerator
 from userport.slack_models import (
     SlackUpload,
     SlackUploadStatus,
     SlackSection
 )
-from userport.utils import convert_to_markdown_heading
+import userport.utils
 import userport.db
 from celery import shared_task
 
 bp = Blueprint('slack_app', __name__)
 
 load_dotenv()  # take environment variables from .env.
+
+# TODO: Change to custom domain in production.
+HARDCODED_DOMAIN_URL = 'https://fb5e-2409-40f2-1041-7619-857c-13e-96b0-e84d.ngrok-free.app'
 
 
 def get_slack_web_client() -> WebClient:
@@ -435,6 +440,18 @@ def handle_interactive_endpoint():
     return "", 200
 
 
+@bp.route('/<team_domain>/<path:subpath>', methods=['GET'])
+def render_documentation_page(team_domain: str, subpath: str):
+    # Remove / in the subpath.
+    page_html_section_id = escape(subpath).replace("/", "")
+
+    html_generator = SlackHTMLGenerator()
+    page_html: str = html_generator.get_page(team_domain=team_domain,
+                                             page_html_section_id=page_html_section_id)
+
+    return page_html, 200
+
+
 @shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})
 def answer_user_query_in_background(user_query: str, team_id: str, channel_id: str, user_id: str, private_visibility: bool):
     slack_inference = SlackInference()
@@ -492,12 +509,13 @@ def create_modal_from_shortcut_in_background(create_doc_shortcut_json: str):
     # Write upload to db.
     user_id = create_doc_shortcut.get_user_id()
     team_id = create_doc_shortcut.get_team_id()
+    team_domain = create_doc_shortcut.get_team_domain()
     shortcut_callback_id = create_doc_shortcut.get_callback_id()
     response_url = create_doc_shortcut.get_response_url()
     channel_id = create_doc_shortcut.get_channel_id()
     message_ts = create_doc_shortcut.get_message_ts()
     view_id = view_response.get_id()
-    userport.db.create_slack_upload(creator_id=user_id, team_id=team_id, view_id=view_id,
+    userport.db.create_slack_upload(creator_id=user_id, team_id=team_id, team_domain=team_domain, view_id=view_id,
                                     response_url=response_url, shortcut_callback_id=shortcut_callback_id,
                                     channel_id=channel_id, message_ts=message_ts)
 
@@ -574,6 +592,7 @@ def create_new_page_in_background(view_id: str, new_page_title: str):
     # Gather information from upload.
     upload_id: str = slack_upload.id
     team_id: str = slack_upload.team_id
+    team_domain: str = slack_upload.team_domain
     creator_id: str = slack_upload.creator_id
     section_heading_plain_text: str = slack_upload.heading_plain_text
     section_text_markdown: str = slack_upload.text_markdown
@@ -585,24 +604,33 @@ def create_new_page_in_background(view_id: str, new_page_title: str):
         **slack_response.data).get_email()
 
     # Create Slack Section for both section and page.
+    page_html_section_id: str = userport.utils.convert_to_url_path_text(
+        text=new_page_title)
     page_section = SlackSection(
         upload_id=upload_id,
         team_id=team_id,
+        team_domain=team_domain,
         creator_id=creator_id,
         creator_email=creator_email,
         updater_id=creator_id,
         updater_email=creator_email,
-        heading=convert_to_markdown_heading(text=new_page_title, number=1)
+        heading=userport.utils.convert_to_markdown_heading(
+            text=new_page_title, number=1),
+        html_section_id=page_html_section_id,
     )
+    child_html_section_id: str = userport.utils.convert_to_url_path_text(
+        text=section_heading_plain_text)
     child_section = SlackSection(
         upload_id=upload_id,
         team_id=team_id,
+        team_domain=team_domain,
         creator_id=creator_id,
         creator_email=creator_email,
         updater_id=creator_id,
         updater_email=creator_email,
-        heading=convert_to_markdown_heading(
+        heading=userport.utils.convert_to_markdown_heading(
             text=section_heading_plain_text, number=2),
+        html_section_id=child_html_section_id,
         text=section_text_markdown
     )
 
@@ -611,11 +639,18 @@ def create_new_page_in_background(view_id: str, new_page_title: str):
         page_section=page_section, child_section=child_section)
 
     # Complete upload in background.
-    complete_new_page_upload_in_background.delay(upload_id, page_id)
+    uploaded_url = userport.utils.create_documentation_url(
+        host_name=HARDCODED_DOMAIN_URL,
+        team_domain=team_domain,
+        page_html_id=page_html_section_id,
+        section_html_id=child_html_section_id
+    )
+    complete_new_page_upload_in_background.delay(
+        upload_id, page_id, uploaded_url)
 
 
 @shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})
-def complete_new_page_upload_in_background(upload_id: str, page_id: str):
+def complete_new_page_upload_in_background(upload_id: str, page_id: str, uploaded_url: str):
     """
     Complete upload process so that the page and child sections can be indexed for retrieval.
 
@@ -650,5 +685,5 @@ def complete_new_page_upload_in_background(upload_id: str, page_id: str):
             upload_id=upload_id, upload_status=SlackUploadStatus.COMPLETED)
         logging.info("Updated Upload Status to in Completed successfully")
 
-    webhook.send(text="Documentation upload complete!",
+    webhook.send(text=f"Documentation upload complete! Available at {uploaded_url}",
                  response_type=SlashCommandVisibility.PRIVATE.value)

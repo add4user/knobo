@@ -336,15 +336,16 @@ def delete_upload_and_sections_transactionally(upload_id: str):
                     f"Expected 1 doc to be deleted, got {deleted_result.deleted_count} deleted")
 
 
-def create_slack_upload(creator_id: str, team_id: str, view_id: str, response_url: str, shortcut_callback_id: str, channel_id: str, message_ts: str) -> str:
+def create_slack_upload(creator_id: str, team_id: str, team_domain: str, view_id: str,
+                        response_url: str, shortcut_callback_id: str, channel_id: str, message_ts: str) -> str:
     """
     Creates an Slack upload object and returns created ID.
     """
     current_time = _get_current_time()
-    upload = SlackUpload(creator_id=creator_id, team_id=team_id, view_id=view_id, response_url=response_url,
-                         shortcut_callback_id=shortcut_callback_id, status=SlackUploadStatus.NOT_STARTED,
-                         channel_id=channel_id, message_ts=message_ts, created_time=current_time,
-                         last_updated_time=current_time)
+    upload = SlackUpload(creator_id=creator_id, team_id=team_id, team_domain=team_domain, view_id=view_id,
+                         response_url=response_url, shortcut_callback_id=shortcut_callback_id,
+                         status=SlackUploadStatus.NOT_STARTED, channel_id=channel_id, message_ts=message_ts,
+                         created_time=current_time, last_updated_time=current_time)
 
     slack_uploads = _get_slack_uploads()
     result = slack_uploads.insert_one(upload.model_dump(exclude=_exclude_id()))
@@ -487,6 +488,57 @@ def get_slack_section(id: str) -> SlackSection:
         raise NotFoundException(
             f'No Slack Section found for ID: {id}')
     return got_section
+
+
+def get_ordered_slack_sections_in_page(team_domain: str, page_html_section_id: str) -> List[SlackSection]:
+    """
+    Return ordered list (DFS traversal from page title) of Slack Sections in given page of given team.
+    """
+    sections = _get_slack_sections()
+
+    # Find page section first.
+    page_section: SlackSection = _model_from_dict(
+        SlackSection,
+        sections.find_one(_to_slack_find_request_dict(
+            FindSlackSectionRequest(
+                team_domain=team_domain, html_section_id=page_html_section_id)
+        )
+        )
+    )
+    if page_section == None:
+        raise NotFoundException(
+            f"No Page found for team domain: {team_domain} and Page HTML Section id {page_html_section_id}")
+
+    # Find all sections in given page id.
+    page_id = str(page_section.id)
+    find_request_dict = _to_slack_find_request_dict(
+        FindSlackSectionRequest(page_id=page_id)
+    )
+    all_sections_dict: Dict[str, SlackSection] = {}
+    for slack_section_dict in sections.find(find_request_dict):
+        slack_section: SlackSection = _model_from_dict(
+            SlackSection, slack_section_dict)
+        all_sections_dict[str(slack_section.id)] = slack_section
+
+    # Perform DFS to get final list of sections.
+    final_section_list: List[SlackSection] = []
+    _dfs_over_sections_in_page(current_section=page_section,
+                               all_sections_dict=all_sections_dict, final_section_list=final_section_list)
+    return final_section_list
+
+
+def _dfs_over_sections_in_page(current_section: SlackSection, all_sections_dict: Dict[str, SlackSection], final_section_list: List[SlackSection]):
+    """
+    Helper method to DFS over given slack sections and append results to given list.
+    """
+    final_section_list.append(current_section)
+    for child_id in current_section.child_section_ids:
+        if child_id not in all_sections_dict:
+            raise NotFoundException(
+                f"Expected section id {child_id} to be present in all sections dictionary: {all_sections_dict}")
+        _dfs_over_sections_in_page(
+            current_section=all_sections_dict[child_id], all_sections_dict=all_sections_dict, final_section_list=final_section_list
+        )
 
 
 def write_slack_sections(find_and_update_requests: List[FindAndUpateSlackSectionRequest]):

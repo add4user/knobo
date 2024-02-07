@@ -83,6 +83,8 @@ class SlackUpload(BaseModel):
     creator_id: str = Field(...)
     # Slack Workspace ID that the section is a part of.
     team_id: str = Field(...)
+    # Slack Workspace Domain that the section is a part of.
+    team_domain: str = Field(...)
     # Heading of the section to be added in Plain text.
     # Empty when we are uploading from external doc like web page or Google Docs.
     heading_plain_text: str = Field(default="")
@@ -143,8 +145,12 @@ class SlackSection(BaseModel):
     upload_id: str
     # Slack Workspace ID that the section is a part of.
     team_id: str = Field(...)
+    # Slack Workspace Domain that the section is a part of.
+    team_domain: str = Field(...)
     # ID of the page the section is part of.
     page_id: str = Field(default="")
+    # HTML Section ID. This is used to generate a URL to this section directly.
+    html_section_id: str = Field(default="")
     # ID of the parent section and empty if root section of the page.
     # We store this to reconstruct the page correctly in the UI.
     # The order is determined by DFS starting from the top of the page.
@@ -189,7 +195,11 @@ class FindSlackSectionRequest(BaseFindRequest):
     Please ensure that attributes here are in sync with
     SlackSection attributes.
     """
-    id: Optional[CustomPyObjectId] = Field(serialization_alias="_id")
+    id: Optional[CustomPyObjectId] = Field(
+        serialization_alias="_id", default=None)
+    team_domain: Optional[str] = None
+    html_section_id: Optional[str] = None
+    page_id: Optional[str] = None
 
 
 class UpdateSlackSectionRequest(BaseUpdateSubRequest):

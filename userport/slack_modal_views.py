@@ -27,6 +27,7 @@ class InteractionPayload(BaseModel):
     """
     class SlackTeam(BaseModel):
         id: str
+        domain: str
 
     class SlackUser(BaseModel):
         id: str
@@ -362,6 +363,12 @@ class MessageShortcutPayload(InteractionPayload):
         Return ID of the Slack Workspace.
         """
         return self.team.id
+
+    def get_team_domain(self) -> str:
+        """
+        Return Domain of the Slack Workspace.
+        """
+        return self.team.domain
 
     def get_user_id(self) -> str:
         """
