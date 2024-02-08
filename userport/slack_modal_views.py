@@ -72,6 +72,8 @@ class CommonView(BaseModel):
     # hash is used to avoid race conditions when calling view.update.
     # https://api.slack.com/surfaces/modals#handling_race_conditions
     hash: str
+    blocks: List[Union[InputBlock, RichTextBlock,
+                       HeaderBlock, DividerBlock]] = []
 
     def get_id(self) -> str:
         return self.id
@@ -81,6 +83,9 @@ class CommonView(BaseModel):
 
     def get_hash(self) -> str:
         return self.hash
+
+    def get_blocks(self):
+        return self.blocks
 
 
 class ViewCreatedResponse(BaseModel):
@@ -136,6 +141,12 @@ class BlockActionsPayload(InteractionPayload):
         """
         return len(self.actions) > 0 and self.actions[0].action_id == PlaceDocViewFactory.PAGE_SELECTION_ACTION_ID
 
+    def is_parent_section_selection_action_id(self) -> bool:
+        """
+        Returns True if parent section selection action ID, False otherwise.
+        """
+        return len(self.actions) > 0 and self.actions[0].action_id == PlaceDocViewFactory.PARENT_SECTION_SELECTION_ACTION_ID
+
 
 class SelectMenuAction(BaseModel):
     """
@@ -182,6 +193,9 @@ class SelectMenuBlockActionsPayload(InteractionPayload):
 
     def get_team_domain(self) -> str:
         return self.team.domain
+
+    def get_blocks(self) -> List:
+        return self.view.get_blocks()
 
 
 class InputPlainTextValue(BaseModel):
@@ -469,7 +483,7 @@ class BaseModalView(BaseModel):
 
     type: str = MODAL_VALUE
     title: PlainTextObject
-    blocks: List[Union[InputBlock, RichTextBlock]]
+    blocks: List[Union[InputBlock, RichTextBlock, HeaderBlock, DividerBlock]]
     submit: PlainTextObject
     close: PlainTextObject
     notify_on_close: bool = True
@@ -649,8 +663,13 @@ class PlaceDocViewFactory:
     PROMPT_USER_TO_SELECT_PARENT_SECTION_BLOCK_ID = "parent_section_selection_block_id"
     PROMPT_USER_TO_SELECT_PARENT_SECTION_TEXT = "Please select the parent section directly under which the new section will be placed."
 
+    PARENT_SECTION_SELECTION_ACTION_ID = "parent_section_action_id"
     PARENT_SECTION_SELECTION_BLOCK_ID = "parent_section_block_id"
     PARENT_SECTION_SELECTION_TEXT = "Parent Section"
+
+    POSITION_SELECTION_ACTION_ID = "position_selection_action_id"
+    POSITION_SELECTION_BLOCK_ID = "position_selection_block_id"
+    POSITION_SELECTION_TEXT = "Insertion Position"
 
     SUBMIT_TEXT = "Submit"
     CLOSE_TEXT = "Cancel"
@@ -763,6 +782,35 @@ class PlaceDocViewFactory:
 
         return base_view
 
+    def create_with_selected_parent_section(self, existing_blocks: List[Union[InputBlock, RichTextBlock,
+                                                                              HeaderBlock, DividerBlock]], selected_option: SelectOptionObject) -> BaseModalView:
+        """
+        Create view with selected parent section.
+
+        We will add the child sections to the view for the user to select from.
+        """
+        base_view = self._create_base_view()
+        base_view.blocks = existing_blocks
+
+        section_id: str = selected_option.value
+        child_sections: List[SlackSection] = userport.db.get_slack_sections_with_parent(
+            parent_section_id=section_id)
+        if len(child_sections) == 0:
+            # We may have to remove last block of postiion selection if it exists.
+            if base_view.blocks[-1].block_id == self.POSITION_SELECTION_BLOCK_ID:
+                base_view.blocks.pop()
+            return base_view
+
+        position_selection_menu = self._create_positions_menu_from_sections(
+            slack_sections=child_sections)
+        parent_section_input_block = self._create_selection_menu_input_block(
+            block_id=self.POSITION_SELECTION_BLOCK_ID,
+            text=self.POSITION_SELECTION_TEXT,
+            select_menu_element=position_selection_menu,
+        )
+        base_view.blocks.append(parent_section_input_block)
+        return base_view
+
     @staticmethod
     def is_create_new_page_action(action: SelectMenuAction) -> bool:
         """
@@ -794,6 +842,7 @@ class PlaceDocViewFactory:
                 # Create a new list.
                 cur_list = RichTextListElement(
                     style=RichTextListElement.STYLE_BULLET,
+                    border=1,
                     indent=indent,
                     elements=[
                         RichTextSectionElement(elements=[
@@ -834,7 +883,10 @@ class PlaceDocViewFactory:
             )
             all_options.append(page_option)
         return self._create_selection_menu_element(
-            options=all_options, selected_option=selected_option)
+            action_id=self.PAGE_SELECTION_ACTION_ID,
+            options=all_options,
+            selected_option=selected_option
+        )
 
     def _create_selection_menu_from_sections(self, slack_sections: List[SlackSection]) -> SelectMenuStaticElement:
         """
@@ -846,7 +898,48 @@ class PlaceDocViewFactory:
             selection_option = self._create_select_option_object(
                 text=heading_content, id=str(section.id))
             all_options.append(selection_option)
-        return self._create_selection_menu_element(options=all_options)
+        return self._create_selection_menu_element(
+            action_id=self.PARENT_SECTION_SELECTION_ACTION_ID,
+            options=all_options
+        )
+
+    def _create_positions_menu_from_sections(self, slack_sections: List[SlackSection]) -> SelectMenuStaticElement:
+        """
+        Create and return menu describing positions of these sections.
+        """
+        all_options: List[SelectOptionObject] = []
+
+        # Starting option.
+        starting_heading = get_heading_content(slack_sections[0].heading)
+        starting_option_text = f'Before "{starting_heading}"'
+        selection_option = self._create_select_option_object(
+            text=starting_option_text, id=str(0))
+        all_options.append(selection_option)
+
+        # Options in between.
+        for i in range(1, len(slack_sections) - 1):
+            prev_section = slack_sections[i-1]
+            section = slack_sections[i]
+
+            prev_heading_content = get_heading_content(prev_section.heading)
+            heading_content = get_heading_content(section.heading)
+            text: str = f'Between "{prev_heading_content}" and "{heading_content}"'
+            selection_option = self._create_select_option_object(
+                text=text, id=str(i))
+            all_options.append(selection_option)
+
+        # Ending option.
+        ending_heading = get_heading_content(
+            slack_sections[len(slack_sections)-1].heading)
+        ending_option_text = f'After "{ending_heading}"'
+        selection_option = self._create_select_option_object(
+            text=ending_option_text, id=str(len(slack_sections)))
+        all_options.append(selection_option)
+
+        return self._create_selection_menu_element(
+            action_id=self.POSITION_SELECTION_ACTION_ID,
+            options=all_options
+        )
 
     def _create_select_option_object(self, text: str, id: str) -> SelectOptionObject:
         """
@@ -857,14 +950,14 @@ class PlaceDocViewFactory:
             value=id,
         )
 
-    def _create_selection_menu_element(self, options: List[SelectOptionObject],
+    def _create_selection_menu_element(self, action_id: str, options: List[SelectOptionObject],
                                        selected_option: SelectOptionObject = None) -> SelectMenuStaticElement:
         """
         Create Selection Menu Selection Element from given options. If Selected Option is set as the input
         then we set it in the menu as well.
         """
         select_menu_element = SelectMenuStaticElement(
-            action_id=self.PAGE_SELECTION_ACTION_ID,
+            action_id=action_id,
             options=options,
         )
         if selected_option:

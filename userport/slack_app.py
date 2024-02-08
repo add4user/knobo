@@ -418,23 +418,31 @@ def handle_interactive_endpoint():
 
         elif payload.is_block_actions():
             # Handle Block Elements related updates within a view.
-            if BlockActionsPayload(**payload_dict).is_page_selection_action_id():
-                # User has selected a Page to the add new section to.
+            block_actions_payload = BlockActionsPayload(**payload_dict)
+            if block_actions_payload.is_page_selection_action_id() or block_actions_payload.is_parent_section_selection_action_id():
                 select_menu_actions_payload = SelectMenuBlockActionsPayload(
                     **payload_dict)
                 if len(select_menu_actions_payload.actions) != 1:
                     raise ValueError(
                         f"Expected 1 action in payload, got {select_menu_actions_payload} instead")
-
                 selected_menu_action = select_menu_actions_payload.actions[0]
-                if PlaceDocViewFactory.is_create_new_page_action(selected_menu_action):
-                    # Return an updated view asking user for new page title input.
-                    update_view_with_new_page_title_in_background.delay(
-                        select_menu_actions_payload.model_dump_json(exclude_none=True))
-                else:
-                    # Return updated view with options to place view in page.
-                    update_view_with_place_document_selected_page_in_background.delay(
-                        select_menu_actions_payload.model_dump_json(exclude_none=True))
+                selected_menu_actions_json = select_menu_actions_payload.model_dump_json(
+                    exclude_none=True)
+
+                if block_actions_payload.is_page_selection_action_id():
+                    # User has selected a Page to the add new section to.
+                    if PlaceDocViewFactory.is_create_new_page_action(selected_menu_action):
+                        # Return an updated view asking user for new page title input.
+                        update_view_with_new_page_title_in_background.delay(
+                            selected_menu_actions_json)
+                    else:
+                        # Return updated view with options to place view in page.
+                        update_view_with_place_document_selected_page_in_background.delay(
+                            selected_menu_actions_json)
+                elif block_actions_payload.is_parent_section_selection_action_id():
+                    # User has selected parent section.
+                    update_view_with_parent_section_in_background(
+                        selected_menu_actions_json)
 
     except Exception as e:
         print(f"Encountered error: {e} when parsing payload: {payload_dict}")
@@ -578,7 +586,6 @@ def update_view_with_place_document_selected_page_in_background(select_menu_bloc
     """
     payload = SelectMenuBlockActionsPayload(
         **json.loads(select_menu_block_actions_payload_json))
-
     selected_option = payload.actions[0].get_selected_option()
     pages_within_team: List[SlackSection] = userport.db.get_slack_pages_within_team(
         team_domain=payload.get_team_domain()
@@ -588,6 +595,29 @@ def update_view_with_place_document_selected_page_in_background(select_menu_bloc
         selected_option=selected_option
     ).model_dump(exclude_none=True)
 
+    web_client = get_slack_web_client()
+    web_client.views_update(
+        view_id=payload.get_view_id(),
+        hash=payload.get_view_hash(),
+        view=final_modal_view,
+    )
+
+
+@shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})
+def update_view_with_parent_section_in_background(select_menu_block_actions_payload_json: str):
+    """
+    Update View with parent section selection by user.
+
+    Performed in Celery task so API call path can complete in less than 3s.
+    """
+    payload = SelectMenuBlockActionsPayload(
+        **json.loads(select_menu_block_actions_payload_json))
+    selected_option = payload.actions[0].get_selected_option()
+
+    existing_blocks = payload.get_blocks()
+    final_modal_view = PlaceDocViewFactory().create_with_selected_parent_section(
+        existing_blocks=existing_blocks, selected_option=selected_option).model_dump(exclude_none=True)
+    
     web_client = get_slack_web_client()
     web_client.views_update(
         view_id=payload.get_view_id(),

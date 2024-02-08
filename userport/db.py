@@ -559,6 +559,23 @@ def get_slack_pages_within_team(team_domain: str) -> List[SlackSection]:
     return all_pages
 
 
+def get_slack_sections_with_parent(parent_section_id: str) -> List[SlackSection]:
+    """
+    Return all Slack Sections with given parent section ID.
+    """
+    sections = _get_slack_sections()
+
+    find_request_dict = _to_slack_find_request_dict(
+        FindSlackSectionRequest(parent_section_id=parent_section_id)
+    )
+    child_sections: List[SlackSection] = []
+    for slack_section_dict in sections.find(find_request_dict):
+        slack_section: SlackSection = _model_from_dict(
+            SlackSection, slack_section_dict)
+        child_sections.append(slack_section)
+    return child_sections
+
+
 def write_slack_sections(find_and_update_requests: List[FindAndUpateSlackSectionRequest]):
     """
     Write the given Slack sections transacationally.
