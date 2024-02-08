@@ -651,13 +651,13 @@ class PlaceDocViewFactory:
     CREATE_NEW_PAGE_OPTION_TEXT = "Create New Page"
 
     PROMPT_USER_ABOUT_NEW_PAGE_TITLE_BLOCK_ID = "new_page_title_info_block_id"
-    PROMPT_USER_ABOUT_NEW_PAGE_TITLE = "Please provide a Title for the new page as well."
+    PROMPT_USER_ABOUT_NEW_PAGE_TITLE = "Please provide a Title for the new page."
 
     NEW_PAGE_TITLE_LABEL_TEXT = "New Page Title"
     NEW_PAGE_TITLE_BLOCK_ID = "new_page_title_block_id"
     NEW_PAGE_TITLE_ACTION_ID = "new_page_title_action_id"
 
-    PAGE_LAYOUT_HEADER_TEXT = "Page Layout"
+    PAGE_LAYOUT_HEADER_TEXT = "Current Page Layout"
     ALL_SECTIONS_IN_PAGE_BLOCK_ID = "all_sections_in_page_block_id"
 
     PROMPT_USER_TO_SELECT_PARENT_SECTION_BLOCK_ID = "parent_section_selection_block_id"
@@ -667,9 +667,12 @@ class PlaceDocViewFactory:
     PARENT_SECTION_SELECTION_BLOCK_ID = "parent_section_block_id"
     PARENT_SECTION_SELECTION_TEXT = "Parent Section"
 
+    PROMPT_USER_TO_SELECT_POSITION_BLOCK_ID = "select_position_block_id"
+    PROMPT_USER_TO_SELECT_POSITION_TEXT = "Please select the position of the new section within the parent section."
+
     POSITION_SELECTION_ACTION_ID = "position_selection_action_id"
     POSITION_SELECTION_BLOCK_ID = "position_selection_block_id"
-    POSITION_SELECTION_TEXT = "Insertion Position"
+    POSITION_SELECTION_TEXT = "Select Position"
 
     SUBMIT_TEXT = "Submit"
     CLOSE_TEXT = "Cancel"
@@ -790,17 +793,26 @@ class PlaceDocViewFactory:
         We will add the child sections to the view for the user to select from.
         """
         base_view = self._create_base_view()
+        # Existing blocks could contain a position selection block and information block from previous toggle.
+        # We should remove it (if it exists) before appending the new position selection block.
+        if existing_blocks[-1].block_id == self.POSITION_SELECTION_BLOCK_ID:
+            existing_blocks.pop()
+        if existing_blocks[-1].block_id == self.PROMPT_USER_TO_SELECT_POSITION_BLOCK_ID:
+            existing_blocks.pop()
         base_view.blocks = existing_blocks
 
         section_id: str = selected_option.value
         child_sections: List[SlackSection] = userport.db.get_slack_sections_with_parent(
             parent_section_id=section_id)
         if len(child_sections) == 0:
-            # We may have to remove last block of postiion selection if it exists.
-            if base_view.blocks[-1].block_id == self.POSITION_SELECTION_BLOCK_ID:
-                base_view.blocks.pop()
             return base_view
 
+        # Prompt user to select parent position of section.
+        select_position_info = self._create_rich_text_block(
+            block_id=self.PROMPT_USER_TO_SELECT_POSITION_BLOCK_ID, text=self.PROMPT_USER_TO_SELECT_POSITION_TEXT)
+        base_view.blocks.append(select_position_info)
+
+        # Add selection menu for position of insertion of section.
         position_selection_menu = self._create_positions_menu_from_sections(
             slack_sections=child_sections)
         parent_section_input_block = self._create_selection_menu_input_block(
@@ -869,19 +881,20 @@ class PlaceDocViewFactory:
         Helper to create selection menu from given slack page sections.
         """
         all_options: List[SelectOptionObject] = []
-
-        create_new_page_option = self._create_select_option_object(
-            text=self.CREATE_NEW_PAGE_OPTION_TEXT,
-            id=self.CREATE_NEW_PAGE_OPTION_ID
-        )
-        all_options.append(create_new_page_option)
-
         for page in pages_within_team:
             page_option = self._create_select_option_object(
                 text=get_heading_content(markdown_text=page.heading),
                 id=str(page.id)
             )
             all_options.append(page_option)
+
+        # Add create new page option at the end.
+        create_new_page_option = self._create_select_option_object(
+            text=self.CREATE_NEW_PAGE_OPTION_TEXT,
+            id=self.CREATE_NEW_PAGE_OPTION_ID
+        )
+        all_options.append(create_new_page_option)
+
         return self._create_selection_menu_element(
             action_id=self.PAGE_SELECTION_ACTION_ID,
             options=all_options,
@@ -911,7 +924,7 @@ class PlaceDocViewFactory:
 
         # Starting option.
         starting_heading = get_heading_content(slack_sections[0].heading)
-        starting_option_text = f'Before "{starting_heading}"'
+        starting_option_text = f'Before "{starting_heading}" section'
         selection_option = self._create_select_option_object(
             text=starting_option_text, id=str(0))
         all_options.append(selection_option)
@@ -923,7 +936,7 @@ class PlaceDocViewFactory:
 
             prev_heading_content = get_heading_content(prev_section.heading)
             heading_content = get_heading_content(section.heading)
-            text: str = f'Between "{prev_heading_content}" and "{heading_content}"'
+            text: str = f'Between "{prev_heading_content}" and "{heading_content}" sections'
             selection_option = self._create_select_option_object(
                 text=text, id=str(i))
             all_options.append(selection_option)
@@ -931,7 +944,7 @@ class PlaceDocViewFactory:
         # Ending option.
         ending_heading = get_heading_content(
             slack_sections[len(slack_sections)-1].heading)
-        ending_option_text = f'After "{ending_heading}"'
+        ending_option_text = f'After "{ending_heading}" section'
         selection_option = self._create_select_option_object(
             text=ending_option_text, id=str(len(slack_sections)))
         all_options.append(selection_option)
