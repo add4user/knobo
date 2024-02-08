@@ -626,9 +626,7 @@ class PlaceDocViewFactory:
     VIEW_TITLE = "Select Location"
 
     PLACE_DOC_INFO_BLOCK_ID = "place_doc_info_block_id"
-    PLACE_DOC_INFO_TEXT = "Please select the Page where you want to add this section.\n\n" + \
-        "If you select \"Create New Page\", then please provide a New Page Title as well."
-
+    PLACE_DOC_INFO_TEXT = "Please select the Page where you want to add this section or create a new page for it.\n"
     PAGE_SELECTION_LABEL_TEXT = "Select Page"
     PAGE_SELECTION_BLOCK_ID = "page_selection_block_id"
     PAGE_SELECTION_ACTION_ID = "page_selection_action_id"
@@ -636,11 +634,21 @@ class PlaceDocViewFactory:
     CREATE_NEW_PAGE_OPTION_ID = "creat_new_page_option"
     CREATE_NEW_PAGE_OPTION_TEXT = "Create New Page"
 
+    PROMPT_USER_ABOUT_NEW_PAGE_TITLE_BLOCK_ID = "new_page_title_info_block_id"
+    PROMPT_USER_ABOUT_NEW_PAGE_TITLE = "Please provide a Title for the new page as well."
+
     NEW_PAGE_TITLE_LABEL_TEXT = "New Page Title"
     NEW_PAGE_TITLE_BLOCK_ID = "new_page_title_block_id"
     NEW_PAGE_TITLE_ACTION_ID = "new_page_title_action_id"
 
+    PAGE_LAYOUT_HEADER_TEXT = "Page Layout"
     ALL_SECTIONS_IN_PAGE_BLOCK_ID = "all_sections_in_page_block_id"
+
+    PROMPT_USER_TO_SELECT_PARENT_SECTION_BLOCK_ID = "parent_section_selection_block_id"
+    PROMPT_USER_TO_SELECT_PARENT_SECTION_TEXT = "Please select the parent section directly under which the new section will be placed."
+
+    PARENT_SECTION_SELECTION_BLOCK_ID = "parent_section_block_id"
+    PARENT_SECTION_SELECTION_TEXT = "Parent Section"
 
     SUBMIT_TEXT = "Submit"
     CLOSE_TEXT = "Cancel"
@@ -655,8 +663,11 @@ class PlaceDocViewFactory:
         # Create Page selection Menu and add to view.
         select_menu_element: SelectMenuStaticElement = self._create_selection_menu_from_slack_pages(
             pages_within_team=pages_within_team)
-        page_selection_input_block = self._create_page_selection_input_block(
-            select_menu_element)
+        page_selection_input_block = self._create_selection_menu_input_block(
+            block_id=self.PAGE_SELECTION_BLOCK_ID,
+            text=self.PAGE_SELECTION_LABEL_TEXT,
+            select_menu_element=select_menu_element
+        )
         base_view.blocks.append(page_selection_input_block)
 
         return base_view
@@ -675,9 +686,17 @@ class PlaceDocViewFactory:
         )
         select_menu_element: SelectMenuStaticElement = self._create_selection_menu_from_slack_pages(
             pages_within_team=pages_within_team, selected_option=create_new_page_option)
-        page_selection_input_block = self._create_page_selection_input_block(
-            select_menu_element)
+        page_selection_input_block = self._create_selection_menu_input_block(
+            block_id=self.PAGE_SELECTION_BLOCK_ID,
+            text=self.PAGE_SELECTION_LABEL_TEXT,
+            select_menu_element=select_menu_element
+        )
         base_view.blocks.append(page_selection_input_block)
+
+        # Provide info to user that they need to provide page title as well.
+        new_page_title_info = self._create_rich_text_block(
+            block_id=self.PROMPT_USER_ABOUT_NEW_PAGE_TITLE_BLOCK_ID, text=self.PROMPT_USER_ABOUT_NEW_PAGE_TITLE)
+        base_view.blocks.append(new_page_title_info)
 
         # Create New Page title input block and add to base view.
         new_page_title_input_block = self._create_new_page_title_input_block()
@@ -695,16 +714,19 @@ class PlaceDocViewFactory:
         select_menu_element: SelectMenuStaticElement = self._create_selection_menu_from_slack_pages(
             pages_within_team=pages_within_team, selected_option=selected_option
         )
-        page_selection_input_block = self._create_page_selection_input_block(
-            select_menu_element)
+        page_selection_input_block = self._create_selection_menu_input_block(
+            block_id=self.PAGE_SELECTION_BLOCK_ID,
+            text=self.PAGE_SELECTION_LABEL_TEXT,
+            select_menu_element=select_menu_element
+        )
         base_view.blocks.append(page_selection_input_block)
 
         # Add header block.
         header_block = HeaderBlock(text=TextObject(
-            type=TextObject.TYPE_PLAIN_TEXT, text="Page Layout"))
+            type=TextObject.TYPE_PLAIN_TEXT, text=self.PAGE_LAYOUT_HEADER_TEXT))
         base_view.blocks.append(header_block)
 
-        # Fetch all sections from selected page and display them in rich text block.
+        # Fetch all sections from selected page and display page layout in rich text block.
         page_section: SlackSection = None
         try:
             page_section = next(filter(lambda x: str(
@@ -715,8 +737,23 @@ class PlaceDocViewFactory:
         ordered_sections_in_page = userport.db.get_ordered_slack_sections_in_page(
             team_domain=page_section.team_domain, page_html_section_id=page_section.html_section_id)
         ordered_section_block: RichTextBlock = self._get_ordered_sections_display(
-            ordered_sections=ordered_sections_in_page)
+            ordered_sections_in_page=ordered_sections_in_page)
         base_view.blocks.append(ordered_section_block)
+
+        # Prompt user to select parent Section under which to place the new section.
+        select_parent_section_info = self._create_rich_text_block(
+            block_id=self.PROMPT_USER_TO_SELECT_PARENT_SECTION_BLOCK_ID, text=self.PROMPT_USER_TO_SELECT_PARENT_SECTION_TEXT)
+        base_view.blocks.append(select_parent_section_info)
+
+        # Add Selection Menu for all parent sections (basically all current sections) in the page.
+        parent_selection_menu = self._create_selection_menu_from_sections(
+            slack_sections=ordered_sections_in_page)
+        parent_section_input_block = self._create_selection_menu_input_block(
+            block_id=self.PARENT_SECTION_SELECTION_BLOCK_ID,
+            text=self.PARENT_SECTION_SELECTION_TEXT,
+            select_menu_element=parent_selection_menu,
+        )
+        base_view.blocks.append(parent_section_input_block)
 
         return base_view
 
@@ -735,13 +772,13 @@ class PlaceDocViewFactory:
         """
         return PlaceDocViewFactory.VIEW_TITLE
 
-    def _get_ordered_sections_display(self, ordered_sections: List[SlackSection]) -> RichTextBlock:
+    def _get_ordered_sections_display(self, ordered_sections_in_page: List[SlackSection]) -> RichTextBlock:
         """
-        Return a RichTextBlock displaying ordered sections.
+        Return a RichTextBlock displaying ordered sections in a page.
         """
         all_lists: List[RichTextListElement] = []
         cur_list: RichTextListElement = None
-        for section in ordered_sections:
+        for section in ordered_sections_in_page:
             heading_level, heading_content = get_heading_level_and_content(
                 markdown_text=section.heading)
             indent: int = heading_level - 1
@@ -793,6 +830,18 @@ class PlaceDocViewFactory:
         return self._create_selection_menu_element(
             options=all_options, selected_option=selected_option)
 
+    def _create_selection_menu_from_sections(self, slack_sections: List[SlackSection]) -> SelectMenuStaticElement:
+        """
+        Create and return selection menu with given slack sections as options.
+        """
+        all_options: List[SelectOptionObject] = []
+        for section in slack_sections:
+            heading_content = get_heading_content(section.heading)
+            selection_option = self._create_select_option_object(
+                text=heading_content, id=str(section.id))
+            all_options.append(selection_option)
+        return self._create_selection_menu_element(options=all_options)
+
     def _create_select_option_object(self, text: str, id: str) -> SelectOptionObject:
         """
         Helper to create SelectOptionObject from given text and ID.
@@ -816,14 +865,13 @@ class PlaceDocViewFactory:
             select_menu_element.initial_option = selected_option
         return select_menu_element
 
-    def _create_page_selection_input_block(self, select_menu_element: SelectMenuStaticElement) -> InputBlock:
+    def _create_selection_menu_input_block(self, block_id: str, text: str, select_menu_element: SelectMenuStaticElement) -> InputBlock:
         """
         Helper to create input block that contains page selection menu.
         """
         return InputBlock(
-            label=PlainTextObject(
-                text=self.PAGE_SELECTION_LABEL_TEXT),
-            block_id=self.PAGE_SELECTION_BLOCK_ID,
+            label=PlainTextObject(text=text),
+            block_id=block_id,
             element=select_menu_element,
             dispatch_action=True,
         )
@@ -838,6 +886,22 @@ class PlaceDocViewFactory:
             block_id=self.NEW_PAGE_TITLE_BLOCK_ID,
             element=PlainTextInputElement(
                 action_id=self.NEW_PAGE_TITLE_ACTION_ID)
+        )
+
+    def _create_rich_text_block(self, block_id: str, text: str) -> RichTextBlock:
+        """
+        Helper to create rich text block.
+        """
+        return RichTextBlock(
+            block_id=block_id,
+            elements=[
+                RichTextSectionElement(
+                    elements=[
+                        RichTextObject(
+                            type=RichTextObject.TYPE_TEXT, text=text)
+                    ]
+                ),
+            ],
         )
 
     def _create_base_view(self) -> BaseModalView:
