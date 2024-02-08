@@ -142,11 +142,11 @@ class SlackSection(BaseModel):
     """
     id: Optional[PyObjectId] = Field(alias="_id", default=None)
     # Upload ID associated with the  given section.
-    upload_id: str
+    upload_id: str = Field(default="")
     # Slack Workspace ID that the section is a part of.
-    team_id: str = Field(...)
+    team_id: str = Field(default="")
     # Slack Workspace Domain that the section is a part of.
-    team_domain: str = Field(...)
+    team_domain: str = Field(default="")
     # ID of the page the section is part of.
     page_id: str = Field(default="")
     # HTML Section ID. This is used to generate a URL to this section directly.
@@ -174,15 +174,15 @@ class SlackSection(BaseModel):
     # Done to ensure sections from same page have the same score during search.
     proper_nouns_in_doc: List[str] = []
     # ID of the section creator.
-    creator_id: str = Field(...)
+    creator_id: str = Field(default="")
     # Email of the section creator.
-    creator_email: str = Field(...)
+    creator_email: str = Field(default="")
     # Time when section was created.
     created_time: Optional[datetime] = None
     # ID of the last person to update the section.
-    updater_id: str = Field(...)
+    updater_id: str = Field(default="")
     # Email of the last updater of the section.
-    updater_email: str = Field(...)
+    updater_email: str = Field(default="")
     # Time when section was last updated.
     last_updated_time: Optional[datetime] = None
 

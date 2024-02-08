@@ -12,10 +12,11 @@ from userport.slack_blocks import (
     SelectMenuStaticElement,
     SelectOptionObject,
     HeaderBlock,
-    DividerBlock
+    DividerBlock,
+    RichTextStyle
 )
 from userport.slack_models import SlackSection
-from userport.utils import get_heading_content, get_heading_level_and_content
+from userport.utils import get_heading_content, get_heading_level_and_content, convert_to_markdown_heading
 import userport.db
 
 """
@@ -143,9 +144,15 @@ class BlockActionsPayload(InteractionPayload):
 
     def is_parent_section_selection_action_id(self) -> bool:
         """
-        Returns True if parent section selection action ID, False otherwise.
+        Returns True if parent section selection action ID event, False otherwise.
         """
         return len(self.actions) > 0 and self.actions[0].action_id == PlaceDocViewFactory.PARENT_SECTION_SELECTION_ACTION_ID
+
+    def is_position_selection_action_id(self) -> bool:
+        """
+        Returns True if position selection action ID event, False otherwise.
+        """
+        return len(self.actions) > 0 and self.actions[0].action_id == PlaceDocViewFactory.POSITION_SELECTION_ACTION_ID
 
 
 class SelectMenuAction(BaseModel):
@@ -635,6 +642,91 @@ class PlaceDocNewPageSubmissionPayload(BaseModel):
         return self.view.id
 
 
+class PlaceDocSelectedPositionState(BaseModel):
+    """
+    Class to validate Block Actions payload event of user selecting the 
+    position of the new section in an existing page. With this class,
+    we can get the Page ID, Parent Section ID and position of the new section.
+    """
+    class View(BaseModel):
+        class State(BaseModel):
+            class Values(BaseModel):
+
+                class PageSelectionBlock(BaseModel):
+                    class PageSelectionAction(BaseModel):
+                        class SelectedOption(BaseModel):
+                            value: str
+                        selected_option: SelectedOption
+
+                    page_selection_action_id: PageSelectionAction
+                page_selection_block_id: PageSelectionBlock
+
+                class ParentSectionBlock(BaseModel):
+                    class ParentSectionAction(BaseModel):
+                        class SelectedOption(BaseModel):
+                            value: str
+                        selected_option: SelectedOption
+
+                    parent_section_action_id: ParentSectionAction
+
+                parent_section_block_id: ParentSectionBlock
+
+                class PositionSelectionBlock(BaseModel):
+                    class PositionSelectionAction(BaseModel):
+                        class SelectedOption(BaseModel):
+                            value: str
+                        selected_option: SelectedOption
+
+                    position_selection_action_id: PositionSelectionAction
+
+                position_selection_block_id: PositionSelectionBlock
+            values: Values
+
+        id: str
+        hash: str
+        state: State
+        blocks: List[Union[InputBlock, RichTextBlock,
+                           HeaderBlock, DividerBlock]] = []
+
+    view: View
+
+    def get_page_id(self) -> str:
+        """
+        Returns ID of the selected page.
+        """
+        return self.view.state.values.page_selection_block_id.page_selection_action_id.selected_option.value
+
+    def get_parent_section_id(self) -> str:
+        """
+        Returns ID of parent section of the new section.
+        """
+        return self.view.state.values.parent_section_block_id.parent_section_action_id.selected_option.value
+
+    def get_position(self) -> int:
+        """
+        Returns position of placement of new section within parent section.
+        """
+        return int(self.view.state.values.position_selection_block_id.position_selection_action_id.selected_option.value)
+
+    def get_blocks(self) -> List:
+        """
+        Returns existing blocks in view.
+        """
+        return self.view.blocks
+
+    def get_view_id(self) -> str:
+        """
+        Returns ID of the view.
+        """
+        return self.view.id
+
+    def get_view_hash(self) -> str:
+        """
+        Returns hash of the view.
+        """
+        return self.view.hash
+
+
 class PlaceDocViewFactory:
     """
     Factory class to help create instances of PlaceDocModalView.
@@ -673,6 +765,11 @@ class PlaceDocViewFactory:
     POSITION_SELECTION_ACTION_ID = "position_selection_action_id"
     POSITION_SELECTION_BLOCK_ID = "position_selection_block_id"
     POSITION_SELECTION_TEXT = "Select Position"
+
+    NEW_PAGE_LAYOUT_BLOCK_ID = "new_page_layout_block_id"
+    NEW_PAGE_LAYOUT_HEADER_TEXT = "New Page Layout"
+
+    NEW_SECTIONS_IN_PAGE_BLOCK_ID = "new_sections_in_page_block_id"
 
     SUBMIT_TEXT = "Submit"
     CLOSE_TEXT = "Cancel"
@@ -765,6 +862,7 @@ class PlaceDocViewFactory:
         ordered_sections_in_page = userport.db.get_ordered_slack_sections_in_page(
             team_domain=page_section.team_domain, page_html_section_id=page_section.html_section_id)
         ordered_section_block: RichTextBlock = self._get_ordered_sections_display(
+            block_id=self.ALL_SECTIONS_IN_PAGE_BLOCK_ID,
             ordered_sections_in_page=ordered_sections_in_page)
         base_view.blocks.append(ordered_section_block)
 
@@ -795,6 +893,10 @@ class PlaceDocViewFactory:
         base_view = self._create_base_view()
         # Existing blocks could contain a position selection block and information block from previous toggle.
         # We should remove it (if it exists) before appending the new position selection block.
+        if existing_blocks[-1].block_id == self.NEW_SECTIONS_IN_PAGE_BLOCK_ID:
+            existing_blocks.pop()
+        if existing_blocks[-1].block_id == self.NEW_PAGE_LAYOUT_BLOCK_ID:
+            existing_blocks.pop()
         if existing_blocks[-1].block_id == self.POSITION_SELECTION_BLOCK_ID:
             existing_blocks.pop()
         if existing_blocks[-1].block_id == self.PROMPT_USER_TO_SELECT_POSITION_BLOCK_ID:
@@ -805,6 +907,7 @@ class PlaceDocViewFactory:
         child_sections: List[SlackSection] = userport.db.get_slack_sections_with_parent(
             parent_section_id=section_id)
         if len(child_sections) == 0:
+            # TODO: Show new page layout.
             return base_view
 
         # Prompt user to select parent position of section.
@@ -815,12 +918,96 @@ class PlaceDocViewFactory:
         # Add selection menu for position of insertion of section.
         position_selection_menu = self._create_positions_menu_from_sections(
             slack_sections=child_sections)
-        parent_section_input_block = self._create_selection_menu_input_block(
+        position_selection_input_block = self._create_selection_menu_input_block(
             block_id=self.POSITION_SELECTION_BLOCK_ID,
             text=self.POSITION_SELECTION_TEXT,
             select_menu_element=position_selection_menu,
         )
-        base_view.blocks.append(parent_section_input_block)
+        base_view.blocks.append(position_selection_input_block)
+        return base_view
+
+    def create_with_selected_position(self, position_state: PlaceDocSelectedPositionState) -> BaseModalView:
+        """
+        Create view with selected position of new section.
+
+        We will present layout to user so they can confirm and submit the view.
+        """
+        base_view = self._create_base_view()
+        existing_blocks = position_state.get_blocks()
+        if existing_blocks[-1].block_id == self.NEW_SECTIONS_IN_PAGE_BLOCK_ID:
+            existing_blocks.pop()
+        if existing_blocks[-1].block_id == self.NEW_PAGE_LAYOUT_BLOCK_ID:
+            existing_blocks.pop()
+        base_view.blocks = existing_blocks
+
+        # We will now compute the new layout in a very complex fashion.
+        # Have to read code gymnastics carefully.
+        page_id: str = position_state.get_page_id()
+        parent_id: str = position_state.get_parent_section_id()
+        selected_position_among_children: int = position_state.get_position()
+
+        # Create a dummy Section so we can display it in the layout.
+        # The place doc view and create doc views have the same view IDs.
+        view_id: str = position_state.get_view_id()
+        upload = userport.db.get_slack_upload_from_view_id(view_id=view_id)
+        heading_plain_text: str = upload.heading_plain_text
+
+        # Fetch all ordered Sections and insert the new section within that page.
+        # Very hacky approach, is this really needed? Let's try once.
+        page_section = userport.db.get_slack_section(id=page_id)
+        ordered_sections_in_page = userport.db.get_ordered_slack_sections_in_page(
+            team_domain=page_section.team_domain, page_html_section_id=page_section.html_section_id)
+        child_section_ids = userport.db.get_slack_section(
+            id=parent_id).child_section_ids
+
+        target_child_section_id: str = ""
+        target_child_section_idx: int = -1
+        current_heading_level: int = -1
+        if selected_position_among_children < len(child_section_ids):
+            # New section should be at this index now.
+            target_child_section_id = child_section_ids[selected_position_among_children]
+            target_child_section_idx = [index for index, sec in enumerate(ordered_sections_in_page) if str(
+                sec.id) == target_child_section_id][0]
+            current_heading_level = get_heading_level_and_content(
+                ordered_sections_in_page[target_child_section_idx].heading)[0]
+        else:
+            # Find index of last element and keep going until we find a section with equal or higher heading level.
+            # This logic is crazy noodles and should refactored in the future.
+            target_child_section_id = child_section_ids[-1]
+            target_child_section_idx = [index for index, sec in enumerate(ordered_sections_in_page) if str(
+                sec.id) == target_child_section_id][0]
+            current_heading_level = get_heading_level_and_content(
+                ordered_sections_in_page[target_child_section_idx].heading)[0]
+            target_child_section_idx += 1
+            while target_child_section_idx != len(ordered_sections_in_page):
+                sec = ordered_sections_in_page[target_child_section_idx]
+                if get_heading_level_and_content(sec.heading)[0] >= current_heading_level:
+                    # got the correct index.
+                    break
+                target_child_section_idx += 1
+
+        dummy_section = SlackSection(heading=convert_to_markdown_heading(
+            heading_plain_text, current_heading_level))
+        new_ordered_sections_in_page: List[SlackSection] = []
+        if target_child_section_idx == len(ordered_sections_in_page):
+            new_ordered_sections_in_page = ordered_sections_in_page + \
+                [dummy_section]
+        else:
+            new_ordered_sections_in_page = ordered_sections_in_page[:target_child_section_idx] + \
+                [dummy_section] + \
+                ordered_sections_in_page[target_child_section_idx:]
+
+        # Create New layout header block.
+        base_view.blocks.append(HeaderBlock(block_id=self.NEW_PAGE_LAYOUT_BLOCK_ID, text=TextObject(
+            type=TextObject.TYPE_PLAIN_TEXT, text=self.NEW_PAGE_LAYOUT_HEADER_TEXT)))
+
+        # Create Rich Text List block and append it.
+        new_ordered_section_block: RichTextBlock = self._get_ordered_sections_display(
+            block_id=self.NEW_SECTIONS_IN_PAGE_BLOCK_ID,
+            ordered_sections_in_page=new_ordered_sections_in_page,
+            styled_index=target_child_section_idx)
+        base_view.blocks.append(new_ordered_section_block)
+
         return base_view
 
     @staticmethod
@@ -838,16 +1025,22 @@ class PlaceDocViewFactory:
         """
         return PlaceDocViewFactory.VIEW_TITLE
 
-    def _get_ordered_sections_display(self, ordered_sections_in_page: List[SlackSection]) -> RichTextBlock:
+    def _get_ordered_sections_display(self, block_id: str, ordered_sections_in_page: List[SlackSection], styled_index: int = None) -> RichTextBlock:
         """
         Return a RichTextBlock displaying ordered sections in a page.
         """
         all_lists: List[RichTextListElement] = []
         cur_list: RichTextListElement = None
-        for section in ordered_sections_in_page:
+        for idx, section in enumerate(ordered_sections_in_page):
             heading_level, heading_content = get_heading_level_and_content(
                 markdown_text=section.heading)
             indent: int = heading_level - 1
+            rich_text_obj = RichTextObject(
+                type=RichTextObject.TYPE_TEXT, text=heading_content)
+            if styled_index and styled_index == idx:
+                # Style this object.
+                rich_text_obj.style = RichTextStyle(code=True)
+
             if not cur_list or cur_list.indent != indent:
                 if cur_list:
                     all_lists.append(cur_list)
@@ -857,24 +1050,18 @@ class PlaceDocViewFactory:
                     border=1,
                     indent=indent,
                     elements=[
-                        RichTextSectionElement(elements=[
-                            RichTextObject(
-                                type=RichTextObject.TYPE_TEXT, text=heading_content)
-                        ])
+                        RichTextSectionElement(elements=[rich_text_obj])
                     ]
                 )
             else:
                 # Append to current list.
                 cur_list.elements.append(
-                    RichTextSectionElement(elements=[
-                        RichTextObject(
-                            type=RichTextObject.TYPE_TEXT, text=heading_content)
-                    ])
+                    RichTextSectionElement(elements=[rich_text_obj])
                 )
         if cur_list:
             all_lists.append(cur_list)
 
-        return RichTextBlock(block_id=self.ALL_SECTIONS_IN_PAGE_BLOCK_ID, elements=all_lists)
+        return RichTextBlock(block_id=block_id, elements=all_lists)
 
     def _create_selection_menu_from_slack_pages(self, pages_within_team: List[SlackSection], selected_option: SelectOptionObject = None) -> SelectMenuStaticElement:
         """

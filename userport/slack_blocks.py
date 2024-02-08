@@ -617,6 +617,7 @@ class HeaderBlock(BaseModel):
 
     type: str = TYPE_VALUE
     text: TextObject
+    block_id: Optional[str] = None
 
     @validator("type")
     def validate_type(cls, v):
@@ -643,3 +644,4 @@ class DividerBlock(BaseModel):
     TYPE_VALUE: ClassVar[str] = 'divider'
 
     type: str = TYPE_VALUE
+    block_id: Optional[str] = None
