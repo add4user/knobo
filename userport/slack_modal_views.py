@@ -11,7 +11,8 @@ from userport.slack_blocks import (
     RichTextListElement,
     SelectMenuStaticElement,
     SelectOptionObject,
-    HeaderBlock
+    HeaderBlock,
+    DividerBlock
 )
 from userport.slack_models import SlackSection
 from userport.utils import get_heading_content, get_heading_level_and_content
@@ -694,6 +695,8 @@ class PlaceDocViewFactory:
         )
         base_view.blocks.append(page_selection_input_block)
 
+        base_view.blocks.append(DividerBlock())
+
         # Provide info to user that they need to provide page title as well.
         new_page_title_info = self._create_rich_text_block(
             block_id=self.PROMPT_USER_ABOUT_NEW_PAGE_TITLE_BLOCK_ID, text=self.PROMPT_USER_ABOUT_NEW_PAGE_TITLE)
@@ -722,7 +725,9 @@ class PlaceDocViewFactory:
         )
         base_view.blocks.append(page_selection_input_block)
 
-        # Add header block.
+        base_view.blocks.append(DividerBlock())
+
+        # Add header block for page layout.
         header_block = HeaderBlock(text=TextObject(
             type=TextObject.TYPE_PLAIN_TEXT, text=self.PAGE_LAYOUT_HEADER_TEXT))
         base_view.blocks.append(header_block)

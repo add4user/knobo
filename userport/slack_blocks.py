@@ -632,3 +632,14 @@ class HeaderBlock(BaseModel):
             raise ValueError(
                 f"Expected {TextObject.TYPE_PLAIN_TEXT} as text object type, got {v}")
         return v
+
+
+class DividerBlock(BaseModel):
+    """
+    Class representing Divider Block.
+
+    Reference: https://api.slack.com/reference/block-kit/blocks#divider
+    """
+    TYPE_VALUE: ClassVar[str] = 'divider'
+
+    type: str = TYPE_VALUE
