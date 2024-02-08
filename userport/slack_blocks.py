@@ -557,6 +557,12 @@ class SelectOptionObject(BaseModel):
     text: TextObject
     value: str
 
+    def get_value(self) -> str:
+        """
+        Returns value associated with selection object.
+        """
+        return self.value
+
 
 class SelectMenuStaticElement(BaseModel):
     """
@@ -598,4 +604,31 @@ class InputBlock(BaseModel):
         if v != InputBlock.TYPE_VALUE:
             raise ValueError(
                 f"Expected {InputBlock.TYPE_VALUE} as type value, got {v}")
+        return v
+
+
+class HeaderBlock(BaseModel):
+    """
+    Class representing Header Block.
+
+    Reference: https://api.slack.com/reference/block-kit/blocks#header
+    """
+    TYPE_VALUE: ClassVar[str] = 'header'
+
+    type: str = TYPE_VALUE
+    text: TextObject
+
+    @validator("type")
+    def validate_type(cls, v):
+        if v != HeaderBlock.TYPE_VALUE:
+            raise ValueError(
+                f"Expected {HeaderBlock.TYPE_VALUE} as type value, got {v}")
+        return v
+
+    @validator("text")
+    def validate_text(cls, v):
+        text_obj: TextObject = v
+        if text_obj.type != TextObject.TYPE_PLAIN_TEXT:
+            raise ValueError(
+                f"Expected {TextObject.TYPE_PLAIN_TEXT} as text object type, got {v}")
         return v

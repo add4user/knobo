@@ -8,11 +8,14 @@ from userport.slack_blocks import (
     RichTextInputElement,
     RichTextSectionElement,
     RichTextObject,
+    RichTextListElement,
     SelectMenuStaticElement,
-    SelectOptionObject
+    SelectOptionObject,
+    HeaderBlock
 )
 from userport.slack_models import SlackSection
-from userport.utils import get_heading_content
+from userport.utils import get_heading_content, get_heading_level_and_content
+import userport.db
 
 """
 Module contains helper classes to manage creation and parsing of Slack Modal Views.
@@ -133,17 +136,6 @@ class BlockActionsPayload(InteractionPayload):
         return len(self.actions) > 0 and self.actions[0].action_id == PlaceDocViewFactory.PAGE_SELECTION_ACTION_ID
 
 
-class SelectedOptionText(BaseModel):
-    """
-    Text associated with selected option by user.
-    """
-    text: TextObject
-    value: str
-
-    def get_value(self) -> str:
-        return self.value
-
-
 class SelectMenuAction(BaseModel):
     """
     Class containing Select Menu Action attributes.
@@ -152,7 +144,7 @@ class SelectMenuAction(BaseModel):
     type: str
     action_id: str
     block_id: str
-    selected_option: SelectedOptionText
+    selected_option: SelectOptionObject
 
     def get_action_id(self) -> str:
         """
@@ -165,6 +157,12 @@ class SelectMenuAction(BaseModel):
         Returns ID of the selected option for given Select Menu Action.
         """
         return self.selected_option.get_value()
+
+    def get_selected_option(self) -> SelectOptionObject:
+        """
+        Returns selected option.
+        """
+        return self.selected_option
 
 
 class SelectMenuBlockActionsPayload(InteractionPayload):
@@ -584,7 +582,7 @@ class PlaceDocNewPageSubmissionPayload(BaseModel):
             class NewPageValues(BaseModel):
                 class PageSelectionBlock(BaseModel):
                     class PageSelectionAction(BaseModel):
-                        selected_option: SelectedOptionText
+                        selected_option: SelectOptionObject
                         type: str
 
                         @validator("type")
@@ -642,6 +640,8 @@ class PlaceDocViewFactory:
     NEW_PAGE_TITLE_BLOCK_ID = "new_page_title_block_id"
     NEW_PAGE_TITLE_ACTION_ID = "new_page_title_action_id"
 
+    ALL_SECTIONS_IN_PAGE_BLOCK_ID = "all_sections_in_page_block_id"
+
     SUBMIT_TEXT = "Submit"
     CLOSE_TEXT = "Cancel"
 
@@ -685,18 +685,13 @@ class PlaceDocViewFactory:
 
         return base_view
 
-    def create_with_selected_page(self, pages_within_team: List[SlackSection]) -> BaseModalView:
+    def create_with_selected_page(self, pages_within_team: List[SlackSection], selected_option: SelectOptionObject) -> BaseModalView:
         """
         Create Modal View with existing page selected by user.
-        # TODO: We need to return sections within the page as well.
         """
         base_view = self._create_base_view()
 
         # Create Page selection Menu (with selected page as selected option) and add to view.
-        selected_page = pages_within_team[0]
-        selected_option = self._create_select_option_object(
-            text=get_heading_content(selected_page.heading), id=str(selected_page.id)
-        )
         select_menu_element: SelectMenuStaticElement = self._create_selection_menu_from_slack_pages(
             pages_within_team=pages_within_team, selected_option=selected_option
         )
@@ -704,7 +699,25 @@ class PlaceDocViewFactory:
             select_menu_element)
         base_view.blocks.append(page_selection_input_block)
 
-        # TODO: add sections in page information here.
+        # Add header block.
+        header_block = HeaderBlock(text=TextObject(
+            type=TextObject.TYPE_PLAIN_TEXT, text="Page Layout"))
+        base_view.blocks.append(header_block)
+
+        # Fetch all sections from selected page and display them in rich text block.
+        page_section: SlackSection = None
+        try:
+            page_section = next(filter(lambda x: str(
+                x.id) == selected_option.value, pages_within_team))
+        except StopIteration as e:
+            raise ValueError(
+                f'Failed to find selected option: {selected_option} within Slack page sections: {pages_within_team} with error: {e}')
+        ordered_sections_in_page = userport.db.get_ordered_slack_sections_in_page(
+            team_domain=page_section.team_domain, page_html_section_id=page_section.html_section_id)
+        ordered_section_block: RichTextBlock = self._get_ordered_sections_display(
+            ordered_sections=ordered_sections_in_page)
+        base_view.blocks.append(ordered_section_block)
+
         return base_view
 
     @staticmethod
@@ -721,6 +734,43 @@ class PlaceDocViewFactory:
         Helper to fetch Title of Place Documentation modal view.
         """
         return PlaceDocViewFactory.VIEW_TITLE
+
+    def _get_ordered_sections_display(self, ordered_sections: List[SlackSection]) -> RichTextBlock:
+        """
+        Return a RichTextBlock displaying ordered sections.
+        """
+        all_lists: List[RichTextListElement] = []
+        cur_list: RichTextListElement = None
+        for section in ordered_sections:
+            heading_level, heading_content = get_heading_level_and_content(
+                markdown_text=section.heading)
+            indent: int = heading_level - 1
+            if not cur_list or cur_list.indent != indent:
+                if cur_list:
+                    all_lists.append(cur_list)
+                # Create a new list.
+                cur_list = RichTextListElement(
+                    style=RichTextListElement.STYLE_BULLET,
+                    indent=indent,
+                    elements=[
+                        RichTextSectionElement(elements=[
+                            RichTextObject(
+                                type=RichTextObject.TYPE_TEXT, text=heading_content)
+                        ])
+                    ]
+                )
+            else:
+                # Append to current list.
+                cur_list.elements.append(
+                    RichTextSectionElement(elements=[
+                        RichTextObject(
+                            type=RichTextObject.TYPE_TEXT, text=heading_content)
+                    ])
+                )
+        if cur_list:
+            all_lists.append(cur_list)
+
+        return RichTextBlock(block_id=self.ALL_SECTIONS_IN_PAGE_BLOCK_ID, elements=all_lists)
 
     def _create_selection_menu_from_slack_pages(self, pages_within_team: List[SlackSection], selected_option: SelectOptionObject = None) -> SelectMenuStaticElement:
         """

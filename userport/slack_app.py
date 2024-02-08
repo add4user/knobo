@@ -433,8 +433,7 @@ def handle_interactive_endpoint():
                     update_view_with_new_page_title_in_background.delay(
                         select_menu_actions_payload.model_dump_json(exclude_none=True))
                 else:
-                    # Return updated view with just menu options.
-                    # TODO: Make this a view dependent on the selected option here.
+                    # Return updated view with options to place view in page.
                     update_view_with_place_document_selected_page_in_background.delay(
                         select_menu_actions_payload.model_dump_json(exclude_none=True))
 
@@ -579,11 +578,15 @@ def update_view_with_place_document_selected_page_in_background(select_menu_bloc
     """
     payload = SelectMenuBlockActionsPayload(
         **json.loads(select_menu_block_actions_payload_json))
+
+    selected_option = payload.actions[0].get_selected_option()
     pages_within_team: List[SlackSection] = userport.db.get_slack_pages_within_team(
         team_domain=payload.get_team_domain()
     )
     final_modal_view = PlaceDocViewFactory().create_with_selected_page(
-        pages_within_team=pages_within_team).model_dump(exclude_none=True)
+        pages_within_team=pages_within_team,
+        selected_option=selected_option
+    ).model_dump(exclude_none=True)
 
     web_client = get_slack_web_client()
     web_client.views_update(
