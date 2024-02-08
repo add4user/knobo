@@ -23,9 +23,8 @@ from userport.slack_modal_views import (
     CreateDocSubmissionPayload,
     CancelPayload,
     MessageShortcutPayload,
-    PlaceDocModalView,
+    BaseModalView,
     create_document_view,
-    place_document_with_selected_page_option,
     BlockActionsPayload,
     SelectMenuBlockActionsPayload,
     PlaceDocSubmissionPayload,
@@ -223,7 +222,7 @@ class ViewUpdateResponse(BaseModel):
     ACTION_VALUE: ClassVar[str] = "update"
 
     response_action: str = ACTION_VALUE
-    view: PlaceDocModalView
+    view: BaseModalView
 
     @validator("response_action")
     def validate_type(cls, v):
@@ -402,15 +401,13 @@ def handle_interactive_endpoint():
                         view_id, heading, body)
 
                     # Return an updated view asking user where to place the added section.
-                    # view_update_response = ViewUpdateResponse(
-                    #     view=place_document_view(pages_within_team))
                     view_update_response = ViewUpdateResponse(
                         view=PlaceDocViewFactory().create_with_page_options(
                             pages_within_team)
                     )
 
                     return view_update_response.model_dump(exclude_none=True), 200
-                elif submission_payload.get_view_title() == PlaceDocModalView.get_view_title():
+                elif submission_payload.get_view_title() == PlaceDocViewFactory.get_view_title():
                     if PlaceDocSubmissionPayload(**payload_dict).is_new_page_submission():
                         new_page_submission_payload = PlaceDocNewPageSubmissionPayload(
                             **payload_dict)
@@ -431,7 +428,7 @@ def handle_interactive_endpoint():
                         f"Expected 1 action in payload, got {select_menu_actions_payload} instead")
 
                 selected_menu_action = select_menu_actions_payload.actions[0]
-                if PlaceDocModalView.is_create_new_page_action(selected_menu_action):
+                if PlaceDocViewFactory.is_create_new_page_action(selected_menu_action):
                     # Return an updated view asking user for new page title input.
                     update_view_with_new_page_title_in_background.delay(
                         select_menu_actions_payload.model_dump_json(exclude_none=True))
@@ -558,13 +555,14 @@ def update_view_with_new_page_title_in_background(select_menu_block_actions_payl
     """
     payload = SelectMenuBlockActionsPayload(
         **json.loads(select_menu_block_actions_payload_json))
-    web_client = get_slack_web_client()
     pages_within_team: List[SlackSection] = userport.db.get_slack_pages_within_team(
         team_domain=payload.get_team_domain()
     )
     final_modal_view = PlaceDocViewFactory().create_with_new_page_option_selected(
         pages_within_team=pages_within_team
     ).model_dump(exclude_none=True)
+
+    web_client = get_slack_web_client()
     web_client.views_update(
         view_id=payload.get_view_id(),
         hash=payload.get_view_hash(),
@@ -579,13 +577,19 @@ def update_view_with_place_document_selected_page_in_background(select_menu_bloc
 
     Performed in Celery task so API call path can complete in less than 3s.
     """
-    select_menu_block_actions_payload = SelectMenuBlockActionsPayload(
+    payload = SelectMenuBlockActionsPayload(
         **json.loads(select_menu_block_actions_payload_json))
+    pages_within_team: List[SlackSection] = userport.db.get_slack_pages_within_team(
+        team_domain=payload.get_team_domain()
+    )
+    final_modal_view = PlaceDocViewFactory().create_with_selected_page(
+        pages_within_team=pages_within_team).model_dump(exclude_none=True)
+
     web_client = get_slack_web_client()
     web_client.views_update(
-        view_id=select_menu_block_actions_payload.get_view_id(),
-        hash=select_menu_block_actions_payload.get_view_hash(),
-        view=place_document_with_selected_page_option().model_dump(exclude_none=True),
+        view_id=payload.get_view_id(),
+        hash=payload.get_view_hash(),
+        view=final_modal_view,
     )
 
 

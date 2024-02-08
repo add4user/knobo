@@ -130,7 +130,7 @@ class BlockActionsPayload(InteractionPayload):
         """
         Returns True if page selection action ID, False otherwise.
         """
-        return len(self.actions) > 0 and self.actions[0].action_id == PlaceDocModalView.PAGE_SELECTION_ACTION_ID
+        return len(self.actions) > 0 and self.actions[0].action_id == PlaceDocViewFactory.PAGE_SELECTION_ACTION_ID
 
 
 class SelectedOptionText(BaseModel):
@@ -552,149 +552,6 @@ def create_document_view(initial_body_value: RichTextBlock) -> CreateDocModalVie
     )
 
 
-class PlaceDocModalView(BaseModalView):
-    """
-    Class that asks user to assign placement of Documentation Section
-    in the previous view.
-    """
-
-    class SelectOptionData(BaseModel):
-        """
-        Class to hold selection Option data.
-        This includes text and ID of the option.
-        """
-        text: str
-        id: str
-
-    VIEW_TITLE: ClassVar[str] = "Select Location"
-
-    PLACE_DOC_INFO_BLOCK_ID: ClassVar[str] = "place_doc_info_block_id"
-    PLACE_DOC_INFO_TEXT: ClassVar[str] = "Please select the Page where you want to add this section.\n\n" + \
-        "If you select \"Create New Page\", then please provide a New Page Title as well."
-
-    PAGE_SELECTION_LABEL_TEXT: ClassVar[str] = "Select Page"
-    PAGE_SELECTION_BLOCK_ID: ClassVar[str] = "page_selection_block_id"
-    PAGE_SELECTION_ACTION_ID: ClassVar[str] = "page_selection_action_id"
-
-    CREATE_NEW_PAGE_OPTION_ID: ClassVar[str] = "creat_new_page_option"
-    CREATE_NEW_PAGE_OPTION_TEXT: ClassVar[str] = "Create New Page"
-
-    NEW_PAGE_TITLE_LABEL_TEXT: ClassVar[str] = "New Page Title"
-    NEW_PAGE_TITLE_BLOCK_ID: ClassVar[str] = "new_page_title_block_id"
-    NEW_PAGE_TITLE_ACTION_ID: ClassVar[str] = "new_page_title_action_id"
-
-    SUBMIT_TEXT: ClassVar[str] = "Submit"
-    CLOSE_TEXT: ClassVar[str] = "Cancel"
-
-    @staticmethod
-    def get_view_title() -> str:
-        """
-        Helper to fetch Title of Place Documentation modal view.
-        """
-        return PlaceDocModalView.VIEW_TITLE
-
-    @staticmethod
-    def is_create_new_page_action(action: SelectMenuAction) -> bool:
-        """
-        Returns True if this action represents the Create New Page selection by the user
-        and False otherwise.     
-        """
-        return action.get_selected_option_id() == PlaceDocModalView.CREATE_NEW_PAGE_OPTION_ID
-
-    @staticmethod
-    def create_select_option_object(select_option_data: SelectOptionData) -> SelectOptionObject:
-        """
-        Create Select Option Object from Select Option Data.
-        """
-        return SelectOptionObject(
-            text=TextObject(type=TextObject.TYPE_PLAIN_TEXT,
-                            text=select_option_data.text),
-            value=select_option_data.id,
-        )
-
-    @staticmethod
-    def create_page_selection_menu_element(options: List[SelectOptionObject],
-                                           selected_option: SelectOptionObject = None) -> SelectMenuStaticElement:
-        """
-        Create Page Selection Menu Selection Element from given options. If Selected Option is set as the input
-        then we set it in the menu as well.
-        """
-        select_menu_element = SelectMenuStaticElement(
-            action_id=PlaceDocModalView.PAGE_SELECTION_ACTION_ID,
-            options=options,
-        )
-        if selected_option:
-            select_menu_element.initial_option = selected_option
-        return select_menu_element
-
-
-def place_document_base_view() -> PlaceDocModalView:
-    """
-    Returns base Modal View to place created section from previous view.
-    This is used by other helper methods to add custom Blocks depending the state
-    of the view.
-    """
-    return PlaceDocModalView(
-        title=PlainTextObject(text=PlaceDocModalView.VIEW_TITLE),
-        blocks=[
-            RichTextBlock(
-                block_id=PlaceDocModalView.PLACE_DOC_INFO_BLOCK_ID,
-                elements=[
-                    RichTextSectionElement(
-                        elements=[
-                            RichTextObject(
-                                type=RichTextObject.TYPE_TEXT,
-                                text=PlaceDocModalView.PLACE_DOC_INFO_TEXT,
-                            )
-                        ]
-                    ),
-                ],
-            )
-        ],
-        submit=PlainTextObject(text=PlaceDocModalView.SUBMIT_TEXT),
-        close=PlainTextObject(text=PlaceDocModalView.CLOSE_TEXT),
-    )
-
-
-def place_document_with_selected_page_option() -> PlaceDocModalView:
-    """
-    Returns Modal View with selected page as input. User can still elect
-    to select a different Page option even in this view.
-
-    TODO: The option is currently hardcoded. Will change in the future to 
-    dynamic option.
-    """
-    # Create selection Menu from options.
-    selected_option = PlaceDocModalView.create_select_option_object(
-        PlaceDocModalView.SelectOptionData(text="FAQs", id="xyz_id")
-    )
-    select_menu_element = PlaceDocModalView.create_page_selection_menu_element(
-        options=[
-            # New page option.
-            PlaceDocModalView.create_select_option_object(
-                PlaceDocModalView.SelectOptionData(
-                    text=PlaceDocModalView.CREATE_NEW_PAGE_OPTION_TEXT,
-                    id=PlaceDocModalView.CREATE_NEW_PAGE_OPTION_ID
-                )
-            ),
-            selected_option
-        ],
-        selected_option=selected_option
-    )
-
-    # Add selections to base view.
-    place_doc_base_view = place_document_base_view()
-    selection_input_block = InputBlock(
-        label=PlainTextObject(
-            text=PlaceDocModalView.PAGE_SELECTION_LABEL_TEXT),
-        block_id=PlaceDocModalView.PAGE_SELECTION_BLOCK_ID,
-        element=select_menu_element,
-        dispatch_action=True,
-    )
-    place_doc_base_view.blocks.append(selection_input_block)
-    return place_doc_base_view
-
-
 class PlaceDocSubmissionPayload(BaseModel):
     """
     Atttributes in view submission payload when a new section is placed in 
@@ -712,7 +569,7 @@ class PlaceDocSubmissionPayload(BaseModel):
         Returns True if section should be created in new page and False otherwise.
         """
         for value in self.view.state.values:
-            if value == PlaceDocModalView.NEW_PAGE_TITLE_BLOCK_ID:
+            if value == PlaceDocViewFactory.NEW_PAGE_TITLE_BLOCK_ID:
                 return True
         return False
 
@@ -788,7 +645,7 @@ class PlaceDocViewFactory:
     SUBMIT_TEXT = "Submit"
     CLOSE_TEXT = "Cancel"
 
-    def create_with_page_options(self, pages_within_team: List[SlackSection]) -> PlaceDocModalView:
+    def create_with_page_options(self, pages_within_team: List[SlackSection]) -> BaseModalView:
         """
         Returns Modal View that allows user to select which page to place the created section.
         It adds a Selection Menu with options the user can choose from.
@@ -804,7 +661,7 @@ class PlaceDocViewFactory:
 
         return base_view
 
-    def create_with_new_page_option_selected(self, pages_within_team: List[SlackSection]) -> PlaceDocModalView:
+    def create_with_new_page_option_selected(self, pages_within_team: List[SlackSection]) -> BaseModalView:
         """
         Create Modal view with new page option selected by user. This is the view that
         results from selection in create_with_page_options view.
@@ -827,6 +684,43 @@ class PlaceDocViewFactory:
         base_view.blocks.append(new_page_title_input_block)
 
         return base_view
+
+    def create_with_selected_page(self, pages_within_team: List[SlackSection]) -> BaseModalView:
+        """
+        Create Modal View with existing page selected by user.
+        # TODO: We need to return sections within the page as well.
+        """
+        base_view = self._create_base_view()
+
+        # Create Page selection Menu (with selected page as selected option) and add to view.
+        selected_page = pages_within_team[0]
+        selected_option = self._create_select_option_object(
+            text=get_heading_content(selected_page.heading), id=str(selected_page.id)
+        )
+        select_menu_element: SelectMenuStaticElement = self._create_selection_menu_from_slack_pages(
+            pages_within_team=pages_within_team, selected_option=selected_option
+        )
+        page_selection_input_block = self._create_page_selection_input_block(
+            select_menu_element)
+        base_view.blocks.append(page_selection_input_block)
+
+        # TODO: add sections in page information here.
+        return base_view
+
+    @staticmethod
+    def is_create_new_page_action(action: SelectMenuAction) -> bool:
+        """
+        Returns True if this action represents the Create New Page selection by the user
+        and False otherwise.     
+        """
+        return action.get_selected_option_id() == PlaceDocViewFactory.CREATE_NEW_PAGE_OPTION_ID
+
+    @staticmethod
+    def get_view_title() -> str:
+        """
+        Helper to fetch Title of Place Documentation modal view.
+        """
+        return PlaceDocViewFactory.VIEW_TITLE
 
     def _create_selection_menu_from_slack_pages(self, pages_within_team: List[SlackSection], selected_option: SelectOptionObject = None) -> SelectMenuStaticElement:
         """
@@ -896,7 +790,7 @@ class PlaceDocViewFactory:
                 action_id=self.NEW_PAGE_TITLE_ACTION_ID)
         )
 
-    def _create_base_view(self) -> PlaceDocModalView:
+    def _create_base_view(self) -> BaseModalView:
         """
         Returns Base Modal View to place created section from previous view.
         This is used by other helper methods to add custom Blocks depending the state
@@ -904,7 +798,7 @@ class PlaceDocViewFactory:
 
         This view is like the base layout of the place document view.
         """
-        return PlaceDocModalView(
+        return BaseModalView(
             title=PlainTextObject(text=self.VIEW_TITLE),
             blocks=[
                 RichTextBlock(
