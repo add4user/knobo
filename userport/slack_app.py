@@ -17,18 +17,17 @@ from userport.slack_inference import SlackInference
 from userport.slack_blocks import RichTextBlock
 from userport.slack_modal_views import (
     ViewCreatedResponse,
-    CreateDocModalView,
     InteractionPayload,
     SubmissionPayload,
     CreateDocSubmissionPayload,
     CancelPayload,
     MessageShortcutPayload,
     BaseModalView,
-    create_document_view,
     BlockActionsPayload,
     SelectMenuBlockActionsPayload,
     PlaceDocSubmissionPayload,
     PlaceDocNewPageSubmissionPayload,
+    CreateDocViewFactory,
     PlaceDocViewFactory
 )
 from userport.markdown_parser import MarkdownToRichTextConverter
@@ -385,7 +384,7 @@ def handle_interactive_endpoint():
             elif payload.is_view_submission():
                 # User has submitted the view.
                 submission_payload = SubmissionPayload(**payload_dict)
-                if submission_payload.get_view_title() == CreateDocModalView.get_view_title():
+                if submission_payload.get_view_title() == CreateDocViewFactory.get_view_title():
                     # The view submitted is the Create Section view.
                     create_doc_payload = CreateDocSubmissionPayload(
                         **payload_dict)
@@ -504,7 +503,8 @@ def create_modal_from_shortcut_in_background(create_doc_shortcut_json: str):
 
     # Create view.
     initial_rich_text_block = create_doc_shortcut.get_rich_text_block()
-    view = create_document_view(initial_body_value=initial_rich_text_block)
+    view = CreateDocViewFactory().create_view(
+        initial_body_value=initial_rich_text_block)
     web_client = get_slack_web_client()
     slack_response: SlackResponse = web_client.views_open(
         trigger_id=create_doc_shortcut.get_trigger_id(), view=view.model_dump(exclude_none=True))

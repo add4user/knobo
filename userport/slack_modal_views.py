@@ -481,73 +481,74 @@ class BaseModalView(BaseModel):
         return v
 
 
-class CreateDocModalView(BaseModalView):
+class CreateDocViewFactory:
     """
     Class that takes creates a view to ask for section heading and 
     content inputs from a user.
     """
-    VIEW_TITLE: ClassVar[str] = "Create Section"
+    VIEW_TITLE = "Create Section"
 
-    INFORMATION_BLOCK_ID: ClassVar[str] = "create_doc_info"
+    INFORMATION_BLOCK_ID = "create_doc_info"
+    INFORMATION_TEXT = "You are about to create a new section with a heading and associated body that will be added to the documentation." + \
+        " Once both fields are filled, please click Next. You can abort this operation by clicking Cancel."
 
-    HEADING_TEXT: ClassVar[str] = "Heading"
-    HEADING_BLOCK_ID: ClassVar[str] = "create_doc_heading"
-    HEADING_ELEMENT_ACTION_ID: ClassVar[str] = "create_doc_heading_value"
+    HEADING_TEXT = "Heading"
+    HEADING_BLOCK_ID = "create_doc_heading"
+    HEADING_ELEMENT_ACTION_ID = "create_doc_heading_value"
 
-    BODY_TEXT: ClassVar[str] = "Body"
-    BODY_BLOCK_ID: ClassVar[str] = "create_doc_body"
-    BODY_ELEMENT_ACTION_ID: ClassVar[str] = "create_doc_body_value"
+    BODY_TEXT = "Body"
+    BODY_BLOCK_ID = "create_doc_body"
+    BODY_ELEMENT_ACTION_ID = "create_doc_body_value"
 
-    SUBMIT_TEXT: ClassVar[str] = "Next"
-    CLOSE_TEXT: ClassVar[str] = "Cancel"
+    SUBMIT_TEXT = "Next"
+    CLOSE_TEXT = "Cancel"
 
     @staticmethod
     def get_view_title() -> str:
         """
         Helper to fetch Title of Create Documentation modal view.
         """
-        return CreateDocModalView.VIEW_TITLE
+        return CreateDocViewFactory.VIEW_TITLE
 
-
-def create_document_view(initial_body_value: RichTextBlock) -> CreateDocModalView:
-    """
-    Returns view for Create document with given initial value for section body.
-    """
-    return CreateDocModalView(
-        title=PlainTextObject(text=CreateDocModalView.get_view_title()),
-        blocks=[
-            RichTextBlock(
-                block_id=CreateDocModalView.INFORMATION_BLOCK_ID,
-                elements=[
-                    RichTextSectionElement(
-                        elements=[
-                            RichTextObject(
-                                type=RichTextObject.TYPE_TEXT,
-                                text="You are about to create a new section with a heading and associated body that will be added to the documentation." +
-                                " Once both fields are filled, please click Next. You can abort this operation by clicking Cancel."
-                            )
-                        ]
+    def create_view(self, initial_body_value: RichTextBlock) -> BaseModalView:
+        """
+        Returns view to Create document with given initial value for section body.
+        """
+        return BaseModalView(
+            title=PlainTextObject(text=CreateDocViewFactory.get_view_title()),
+            blocks=[
+                RichTextBlock(
+                    block_id=self.INFORMATION_BLOCK_ID,
+                    elements=[
+                        RichTextSectionElement(
+                            elements=[
+                                RichTextObject(
+                                    type=RichTextObject.TYPE_TEXT,
+                                    text=self.INFORMATION_TEXT,
+                                )
+                            ]
+                        )
+                    ],
+                ),
+                InputBlock(
+                    label=PlainTextObject(
+                        text=self.HEADING_TEXT),
+                    block_id=self.HEADING_BLOCK_ID,
+                    element=PlainTextInputElement(
+                        action_id=self.HEADING_ELEMENT_ACTION_ID)
+                ),
+                InputBlock(
+                    label=PlainTextObject(text=self.BODY_TEXT),
+                    block_id=self.BODY_BLOCK_ID,
+                    element=RichTextInputElement(
+                        action_id=self.BODY_ELEMENT_ACTION_ID,
+                        initial_value=initial_body_value,
                     )
-                ],
-            ),
-            InputBlock(
-                label=PlainTextObject(text=CreateDocModalView.HEADING_TEXT),
-                block_id=CreateDocModalView.HEADING_BLOCK_ID,
-                element=PlainTextInputElement(
-                    action_id=CreateDocModalView.HEADING_ELEMENT_ACTION_ID)
-            ),
-            InputBlock(
-                label=PlainTextObject(text=CreateDocModalView.BODY_TEXT),
-                block_id=CreateDocModalView.BODY_BLOCK_ID,
-                element=RichTextInputElement(
-                    action_id=CreateDocModalView.BODY_ELEMENT_ACTION_ID,
-                    initial_value=initial_body_value,
                 )
-            )
-        ],
-        submit=PlainTextObject(text=CreateDocModalView.SUBMIT_TEXT),
-        close=PlainTextObject(text=CreateDocModalView.CLOSE_TEXT),
-    )
+            ],
+            submit=PlainTextObject(text=self.SUBMIT_TEXT),
+            close=PlainTextObject(text=self.CLOSE_TEXT),
+        )
 
 
 class PlaceDocSubmissionPayload(BaseModel):
