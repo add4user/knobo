@@ -1,7 +1,7 @@
 import userport.db
 from userport.markdown_parser import MarkdownToRichTextConverter
 from userport.slack_models import SlackSection
-from userport.utils import get_heading_level_and_content, to_day_format
+from userport.utils import get_heading_level_and_content, to_day_format, get_heading_content
 from typing import List
 from flask import url_for
 
@@ -54,8 +54,7 @@ class SlackHTMLGenerator:
         html_values: List[str] = []
         for page in slack_pages:
             html_section_id: str = page.html_section_id
-            _, heading_content = get_heading_level_and_content(
-                markdown_text=page.heading)
+            heading_content = get_heading_content(markdown_text=page.heading)
             a_tag = f'<a href="/{team_domain}/{html_section_id}" id="{html_section_id}">{heading_content}</a>'
             html_val = f'<li>{a_tag}</li>'
             html_values.append(html_val)

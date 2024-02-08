@@ -25,13 +25,12 @@ from userport.slack_modal_views import (
     MessageShortcutPayload,
     PlaceDocModalView,
     create_document_view,
-    place_document_view,
-    place_document_with_new_page_title_input,
     place_document_with_selected_page_option,
     BlockActionsPayload,
     SelectMenuBlockActionsPayload,
     PlaceDocSubmissionPayload,
-    PlaceDocNewPageSubmissionPayload
+    PlaceDocNewPageSubmissionPayload,
+    PlaceDocViewFactory
 )
 from userport.markdown_parser import MarkdownToRichTextConverter
 from userport.slack_html_gen import SlackHTMLGenerator
@@ -394,13 +393,22 @@ def handle_interactive_endpoint():
                     view_id = create_doc_payload.get_view_id()
                     heading = create_doc_payload.get_heading_plain_text()
                     body = create_doc_payload.get_body_markdown()
+                    team_domain: str = create_doc_payload.get_team_domain()
+
+                    pages_within_team: List[SlackSection] = userport.db.get_slack_pages_within_team(
+                        team_domain=team_domain)
 
                     update_upload_in_background.delay(
                         view_id, heading, body)
 
                     # Return an updated view asking user where to place the added section.
+                    # view_update_response = ViewUpdateResponse(
+                    #     view=place_document_view(pages_within_team))
                     view_update_response = ViewUpdateResponse(
-                        view=place_document_view())
+                        view=PlaceDocViewFactory().create_with_page_options(
+                            pages_within_team)
+                    )
+
                     return view_update_response.model_dump(exclude_none=True), 200
                 elif submission_payload.get_view_title() == PlaceDocModalView.get_view_title():
                     if PlaceDocSubmissionPayload(**payload_dict).is_new_page_submission():
@@ -548,13 +556,19 @@ def update_view_with_new_page_title_in_background(select_menu_block_actions_payl
 
     Performed in Celery task so API call path can complete in less than 3s.
     """
-    select_menu_block_actions_payload = SelectMenuBlockActionsPayload(
+    payload = SelectMenuBlockActionsPayload(
         **json.loads(select_menu_block_actions_payload_json))
     web_client = get_slack_web_client()
+    pages_within_team: List[SlackSection] = userport.db.get_slack_pages_within_team(
+        team_domain=payload.get_team_domain()
+    )
+    final_modal_view = PlaceDocViewFactory().create_with_new_page_option_selected(
+        pages_within_team=pages_within_team
+    ).model_dump(exclude_none=True)
     web_client.views_update(
-        view_id=select_menu_block_actions_payload.get_view_id(),
-        hash=select_menu_block_actions_payload.get_view_hash(),
-        view=place_document_with_new_page_title_input().model_dump(exclude_none=True),
+        view_id=payload.get_view_id(),
+        hash=payload.get_view_hash(),
+        view=final_modal_view,
     )
 
 

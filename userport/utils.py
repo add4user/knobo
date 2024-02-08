@@ -55,11 +55,29 @@ def get_heading_level_and_content(markdown_text: str) -> (int, str):
     Return Heading level and content from given markdown text. Throws
     error if text is input is not a markdown formatted heading.
     """
+    match = _get_heading_markdown_match(markdown_text)
+    return len(match.group(1)), match.group(2)
+
+
+def get_heading_content(markdown_text: str) -> (int, str):
+    """
+    Return Heading content from given markdown text. Throws
+    error if text is input is not a markdown formatted heading.
+    """
+    match = _get_heading_markdown_match(markdown_text)
+    return match.group(2)
+
+
+def _get_heading_markdown_match(markdown_text: str) -> re.Match:
+    """
+    Helper that returns match for heading in markdown text. Throws
+    error if text is input is not a markdown formatted heading.
+    """
     match = re.match(pattern=r'^(#+)\s+(.+)', string=markdown_text)
     if match:
-        return len(match.group(1)), match.group(2)
+        return match
     raise ValueError(
-        f'Expected Markdown heading text, got {repr(markdown_text)}')
+        f'Expected Markdown heading in text, got {repr(markdown_text)}')
 
 
 def convert_to_url_path_text(text: str) -> str:
