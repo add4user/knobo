@@ -108,7 +108,22 @@ def create_documentation_url(host_name: str, team_domain: str, page_html_id: str
     """
     Create URL from given host name and page and section.
     """
-    return urljoin(host_name, f"{team_domain}/{page_html_id}/#{section_html_id}")
+    return urljoin(host_name, f"{team_domain}/{page_html_id}#{section_html_id}")
+
+
+def get_endpoint(url: str):
+    """
+    Removes the hostname from a URL and returns the endpoint string.
+
+    Raises exception if the URL is invalid.
+    """
+    parsed_url = urlparse(url)
+    if parsed_url.scheme and parsed_url.path:
+        if parsed_url.fragment:
+            return f'{parsed_url.path}#{parsed_url.fragment}'
+        return parsed_url.path
+
+    raise ValueError(f'Could not fetch hostname, invalid format of URL: {url}')
 
 
 def to_day_format(datetime_obj: datetime) -> str:

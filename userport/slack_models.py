@@ -151,6 +151,10 @@ class SlackSection(BaseModel):
     page_id: str = Field(default="")
     # HTML Section ID. This is used to generate a URL to this section directly.
     html_section_id: str = Field(default="")
+    # HTML ID of the page that this section is part of. This is
+    # used to construct URL to this section without needing to
+    # query the page section each time.
+    page_html_section_id: str = Field(default="")
     # ID of the parent section and empty if root section of the page.
     # We store this to reconstruct the page correctly in the UI.
     # The order is determined by DFS starting from the top of the page.
@@ -235,8 +239,8 @@ class FindAndUpateSlackSectionRequest(BaseModel):
 
 class VectorSearchSlackSectionResult(BaseModel):
     """
-    Result of vector search over SlackSections.
-    It is an embedded model and does not have a collection of its own.
+    Result of vector search over SlackSections. All attributes except 
+    'score' are attributes common to SlackSection.
     """
     # ID of the section. To get other fields of the section, we can just
     # do another read during analysis to pull that information.
@@ -245,6 +249,12 @@ class VectorSearchSlackSectionResult(BaseModel):
     heading: str = Field(...)
     # Markdown formatted text associated with the section.
     text: str = Field(...)
+    # Slack Workspace Domain that the section is a part of.
+    team_domain: str = Field(...)
+    # HTML section ID of page that section residers under (needed for URL construction).
+    page_html_section_id: str = Field(...)
+    # HTML section ID of section (needed for URL construction).
+    html_section_id: str = Field(...)
     # Document score associated with search query (stored in parent model).
     score: float = Field(...)
 

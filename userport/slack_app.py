@@ -31,7 +31,6 @@ from userport.slack_modal_views import (
     PlaceDocViewFactory,
     PlaceDocSelectParentOrPositionState
 )
-from userport.markdown_parser import MarkdownToRichTextConverter
 from userport.slack_html_gen import SlackHTMLGenerator
 from userport.slack_models import (
     SlackUpload,
@@ -484,13 +483,9 @@ def render_documentation_page(team_domain: str, subpath: str):
 
 @shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})
 def answer_user_query_in_background(user_query: str, team_id: str, channel_id: str, user_id: str, private_visibility: bool):
-    slack_inference = SlackInference()
-    inference_answer: str = slack_inference.answer(
+    slack_inference = SlackInference(hostname_url=HARDCODED_HOSTNAME)
+    inference_answer_block: RichTextBlock = slack_inference.answer(
         user_query=user_query, team_id=team_id)
-
-    # Convert to Slack RichTextBlock.
-    answer_rich_text_block: RichTextBlock = MarkdownToRichTextConverter().convert(
-        markdown_text=inference_answer)
 
     # Post answer to user as a chat message.
     web_client = get_slack_web_client()
@@ -499,9 +494,7 @@ def answer_user_query_in_background(user_query: str, team_id: str, channel_id: s
         web_client.chat_postEphemeral(
             channel=channel_id,
             user=user_id,
-            blocks=[
-                answer_rich_text_block.model_dump(exclude_none=True)
-            ]
+            blocks=[inference_answer_block.model_dump(exclude_none=True)]
         )
     else:
         # Post public message.
@@ -510,9 +503,7 @@ def answer_user_query_in_background(user_query: str, team_id: str, channel_id: s
         # to not respond to bot posted messages and enter into a recursive loop like we observed in DMs.
         web_client.chat_postMessage(
             channel=user_id,
-            blocks=[
-                answer_rich_text_block.model_dump(exclude_none=True)
-            ]
+            blocks=[inference_answer_block.model_dump(exclude_none=True)]
         )
 
 
@@ -706,6 +697,7 @@ def create_new_page_in_background(view_id: str, new_page_title: str):
         heading=userport.utils.convert_to_markdown_heading(
             text=new_page_title, level=1),
         html_section_id=page_html_section_id,
+        page_html_section_id=page_html_section_id,
     )
     child_html_section_id: str = userport.utils.convert_to_url_path_text(
         text=section_heading_plain_text)
@@ -719,8 +711,9 @@ def create_new_page_in_background(view_id: str, new_page_title: str):
         updater_email=creator_email,
         heading=userport.utils.convert_to_markdown_heading(
             text=section_heading_plain_text, level=2),
+        text=section_text_markdown,
         html_section_id=child_html_section_id,
-        text=section_text_markdown
+        page_html_section_id=page_html_section_id,
     )
 
     # Write sections to database.
@@ -774,6 +767,7 @@ def create_section_inside_page_in_background(placed_doc_submission_json):
         **slack_response.data).get_email()
 
     # Create new section object and insert into parent section as child.
+    page_section = userport.db.get_slack_section(id=page_id)
     child_html_section_id: str = userport.utils.convert_to_url_path_text(
         text=section_heading_plain_text)
     parent_section = userport.db.get_slack_section(id=parent_section_id)
@@ -792,14 +786,14 @@ def create_section_inside_page_in_background(placed_doc_submission_json):
         updater_email=creator_email,
         heading=userport.utils.convert_to_markdown_heading(
             text=section_heading_plain_text, level=child_heading_level),
+        text=section_text_markdown,
         html_section_id=child_html_section_id,
-        text=section_text_markdown
+        page_html_section_id=page_section.html_section_id,
     )
     userport.db.insert_section_in_parent(
         child_section=child_section, parent_section_id=parent_section_id, position=position)
 
     # Complete upload in background.
-    page_section = userport.db.get_slack_section(id=page_id)
     uploaded_url = userport.utils.create_documentation_url(
         host_name=HARDCODED_HOSTNAME,
         team_domain=team_domain,

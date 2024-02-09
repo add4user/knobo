@@ -13,6 +13,8 @@ class AnswerFromSectionsResult:
     prompt: str = ""
     # True if information answering user query is found in the sections, False otherwise.
     information_found: bool = False
+    # Chose section's index among relevent sections used to generate the answer.
+    chosen_section_index: int = -1
     # Chosen section text by Assistant containing the answer (if any).
     chosen_section_text: str = ""
     # Final answer text provided by Assistant.
@@ -122,6 +124,8 @@ class TextAnalyzer:
         """
         Generate answer to user query and relevant text list in JSON mode.
         Returns instance of the AnswerFromSectionsResult class after response validation.
+
+        If markdown is set to true, then it returns answer text in Markdown format.
         """
         prompt: str = self._create_answer_prompt(
             user_query=user_query, relevant_text_list=relevant_text_list, markdown=markdown)
@@ -159,6 +163,7 @@ class TextAnalyzer:
             raise ValueError(
                 f"Section number not in expected range (1, {len(relevant_text_list)}) for {response_dict} in {result}")
         result.chosen_section_text = relevant_text_list[section_number-1]
+        result.chosen_section_index = section_number - 1
 
         return result
 
