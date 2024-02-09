@@ -219,6 +219,10 @@ class UpdateSlackSectionRequest(BaseUpdateSubRequest):
     summary_vector_embedding: Optional[List[float]] = None
     proper_nouns_in_section: Optional[List[str]] = None
     proper_nouns_in_doc: Optional[List[str]] = None
+    updater_id: str = Field(default="")
+    updater_email: str = Field(default="")
+    child_section_ids: Optional[List[str]] = None
+    last_updated_time: Optional[datetime] = None
 
 
 class FindAndUpateSlackSectionRequest(BaseModel):

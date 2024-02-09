@@ -40,13 +40,13 @@ def generate_hash(key: str) -> str:
     return h.hexdigest(16)
 
 
-def convert_to_markdown_heading(text: str, number: int):
+def convert_to_markdown_heading(text: str, level: int):
     """
-    Convert text to Markdown heading with given number.
+    Convert text to Markdown heading with given level.
     Number should be >= 1.
     """
-    assert number >= 1, f"Expected heading number >=1, got {number}"
-    prefix = "#" * number
+    assert level >= 1, f"Expected heading level >=1, got {level}"
+    prefix = "#" * level
     return f"{prefix} {text}"
 
 
@@ -57,6 +57,15 @@ def get_heading_level_and_content(markdown_text: str) -> (int, str):
     """
     match = _get_heading_markdown_match(markdown_text)
     return len(match.group(1)), match.group(2)
+
+
+def get_heading_level(markdown_text: str) -> int:
+    """
+    Return Heading level from given markdown text. Throws
+    error if text is input is not a markdown formatted heading.
+    """
+    match = _get_heading_markdown_match(markdown_text)
+    return len(match.group(1))
 
 
 def get_heading_content(markdown_text: str) -> (int, str):

@@ -16,7 +16,12 @@ from userport.slack_blocks import (
     RichTextStyle
 )
 from userport.slack_models import SlackSection
-from userport.utils import get_heading_content, get_heading_level_and_content, convert_to_markdown_heading
+from userport.utils import (
+    get_heading_content,
+    get_heading_level_and_content,
+    convert_to_markdown_heading,
+    get_heading_level
+)
 import userport.db
 
 """
@@ -678,7 +683,10 @@ class PlaceDocSelectParentOrPositionState(BaseModel):
                     class PositionSelectionAction(BaseModel):
                         class SelectedOption(BaseModel):
                             value: str
-                        selected_option: SelectedOption
+
+                        # It's possible that the user has not selected
+                        # this menu item and has switched to another parent.
+                        selected_option: Optional[SelectedOption] = None
 
                     position_selection_action_id: PositionSelectionAction
 
@@ -709,6 +717,9 @@ class PlaceDocSelectParentOrPositionState(BaseModel):
         """
         Returns position of placement of new section within parent section.
         """
+        if not self.view.state.values.position_selection_block_id:
+            # Position not selected, return position as 0.
+            return 0
         return int(self.view.state.values.position_selection_block_id.position_selection_action_id.selected_option.value)
 
     def get_blocks(self) -> List:
@@ -990,8 +1001,7 @@ class PlaceDocViewFactory:
             team_domain=page_section.team_domain, page_html_section_id=page_section.html_section_id)
         parent_section = userport.db.get_slack_section(
             id=parent_id)
-        parent_heading_level = get_heading_level_and_content(parent_section.heading)[
-            0]
+        parent_heading_level = get_heading_level(parent_section.heading)
         child_heading_level = parent_heading_level + 1
         child_section_ids = parent_section.child_section_ids
 
@@ -1015,7 +1025,7 @@ class PlaceDocViewFactory:
             target_child_section_idx += 1
             while target_child_section_idx != len(ordered_sections_in_page):
                 sec = ordered_sections_in_page[target_child_section_idx]
-                if get_heading_level_and_content(sec.heading)[0] >= child_heading_level:
+                if get_heading_level(sec.heading) >= child_heading_level:
                     # got the correct index.
                     break
                 target_child_section_idx += 1

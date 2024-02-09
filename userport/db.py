@@ -33,6 +33,7 @@ from bson.objectid import ObjectId
 from typing import Optional, Dict, List, Type
 from userport.index.page_section_manager import PageSection
 from queue import Queue
+import copy
 
 
 class NotFoundException(Exception):
@@ -475,6 +476,53 @@ def create_slack_page_and_section(page_section: SlackSection, child_section: Sla
             return page_id, child_id
 
 
+def insert_section_in_parent(child_section: SlackSection, parent_section_id: str, position: int) -> (str, str):
+    """
+    Create Section and insert into given parent section at given position in a single transaction.
+
+    We assume that all attributes except creation and updation time are populated
+    correctly by the application layer in the inputs.
+    """
+    current_time = _get_current_time()
+    child_section.created_time = current_time
+    child_section.last_updated_time = current_time
+
+    slack_sections = _get_slack_sections()
+    client = _get_mongo_client()
+    with client.start_session() as session:
+        with session.start_transaction():
+            child_id = str(slack_sections.insert_one(
+                child_section.model_dump(exclude=_exclude_id())).inserted_id)
+
+            # Fetch current parent section.
+            parent_section: SlackSection = _model_from_dict(
+                SlackSection,
+                slack_sections.find_one(_to_slack_find_request_dict(
+                    FindSlackSectionRequest(id=ObjectId(parent_section_id))
+                ))
+            )
+
+            # Update parent section with new child IDs and updater info.
+            child_section_ids: List[str] = copy.deepcopy(
+                parent_section.child_section_ids)
+            child_section_ids.insert(position, child_id)
+            if not slack_sections.update_one(
+                filter=_to_slack_find_request_dict(
+                    FindSlackSectionRequest(id=ObjectId(parent_section_id))
+                ),
+                update=_to_slack_update_request_dict(
+                    update_sub_request=UpdateSlackSectionRequest(
+                        child_section_ids=child_section_ids,
+                        updater_id=child_section.updater_id,
+                        updater_email=child_section.updater_email,
+                        last_updated_time=current_time
+                    )
+                )
+            ):
+                raise NotFoundException(
+                    f"Failed to find parent section id : {parent_section_id} to update child ids: {child_section_ids}")
+
+
 def get_slack_section(id: str) -> SlackSection:
     """
     Return SlackSection for given ID. Throws Exception if no section is found.
@@ -535,7 +583,7 @@ def _dfs_over_sections_in_page(current_section: SlackSection, all_sections_dict:
     for child_id in current_section.child_section_ids:
         if child_id not in all_sections_dict:
             raise NotFoundException(
-                f"Expected section id {child_id} to be present in all sections dictionary: {all_sections_dict}")
+                f"Expected section id {child_id} to be present in all sections dictionary: {all_sections_dict.keys()}")
         _dfs_over_sections_in_page(
             current_section=all_sections_dict[child_id], all_sections_dict=all_sections_dict, final_section_list=final_section_list
         )

@@ -47,7 +47,7 @@ bp = Blueprint('slack_app', __name__)
 load_dotenv()  # take environment variables from .env.
 
 # TODO: Change to custom domain in production.
-HARDCODED_DOMAIN_URL = 'https://fb5e-2409-40f2-1041-7619-857c-13e-96b0-e84d.ngrok-free.app'
+HARDCODED_HOSTNAME = 'https://fb5e-2409-40f2-1041-7619-857c-13e-96b0-e84d.ngrok-free.app'
 
 
 def get_slack_web_client() -> WebClient:
@@ -416,6 +416,13 @@ def handle_interactive_endpoint():
                         view_id = new_page_submission_payload.get_view_id()
                         create_new_page_in_background.delay(
                             view_id=view_id, new_page_title=new_page_title)
+                    else:
+                        placed_doc_submission = PlaceDocSelectParentOrPositionState(
+                            **payload_dict)
+                        create_section_inside_page_in_background.delay(
+                            placed_doc_submission.model_dump_json(
+                                exclude_none=True)
+                        )
 
         elif payload.is_block_actions():
             # Handle Block Elements related updates within a view.
@@ -697,7 +704,7 @@ def create_new_page_in_background(view_id: str, new_page_title: str):
         updater_id=creator_id,
         updater_email=creator_email,
         heading=userport.utils.convert_to_markdown_heading(
-            text=new_page_title, number=1),
+            text=new_page_title, level=1),
         html_section_id=page_html_section_id,
     )
     child_html_section_id: str = userport.utils.convert_to_url_path_text(
@@ -711,7 +718,7 @@ def create_new_page_in_background(view_id: str, new_page_title: str):
         updater_id=creator_id,
         updater_email=creator_email,
         heading=userport.utils.convert_to_markdown_heading(
-            text=section_heading_plain_text, number=2),
+            text=section_heading_plain_text, level=2),
         html_section_id=child_html_section_id,
         text=section_text_markdown
     )
@@ -722,9 +729,81 @@ def create_new_page_in_background(view_id: str, new_page_title: str):
 
     # Complete upload in background.
     uploaded_url = userport.utils.create_documentation_url(
-        host_name=HARDCODED_DOMAIN_URL,
+        host_name=HARDCODED_HOSTNAME,
         team_domain=team_domain,
         page_html_id=page_html_section_id,
+        section_html_id=child_html_section_id
+    )
+    complete_new_page_upload_in_background.delay(
+        upload_id, page_id, uploaded_url)
+
+
+@shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})
+def create_section_inside_page_in_background(placed_doc_submission_json):
+    """
+    Create Section within existing page and complete upload of the section in the background.
+    """
+    placed_doc_submission = PlaceDocSelectParentOrPositionState(
+        **json.loads(placed_doc_submission_json))
+    page_id: str = placed_doc_submission.get_page_id()
+    parent_section_id: str = placed_doc_submission.get_parent_section_id()
+    position: int = placed_doc_submission.get_position()
+    view_id: str = placed_doc_submission.get_view_id()
+
+    slack_upload: SlackUpload
+    try:
+        slack_upload = userport.db.get_slack_upload_from_view_id(
+            view_id=view_id)
+    except userport.db.NotFoundException as e:
+        logging.error(
+            f"Section insertion into existing page failed for submission: {placed_doc_submission} with error: {e}")
+        return
+
+     # Gather information from upload.
+    upload_id: str = slack_upload.id
+    team_id: str = slack_upload.team_id
+    team_domain: str = slack_upload.team_domain
+    creator_id: str = slack_upload.creator_id
+    section_heading_plain_text: str = slack_upload.heading_plain_text
+    section_text_markdown: str = slack_upload.text_markdown
+
+    # Get creator email.
+    web_client = get_slack_web_client()
+    slack_response: SlackResponse = web_client.users_info(user=creator_id)
+    creator_email: str = UserInfoResponse(
+        **slack_response.data).get_email()
+
+    # Create new section object and insert into parent section as child.
+    child_html_section_id: str = userport.utils.convert_to_url_path_text(
+        text=section_heading_plain_text)
+    parent_section = userport.db.get_slack_section(id=parent_section_id)
+    # Child heading level is 1+ parent heading level.
+    child_heading_level: int = userport.utils.get_heading_level(
+        parent_section.heading) + 1
+    child_section = SlackSection(
+        upload_id=upload_id,
+        parent_section_id=parent_section_id,
+        page_id=page_id,
+        team_id=team_id,
+        team_domain=team_domain,
+        creator_id=creator_id,
+        creator_email=creator_email,
+        updater_id=creator_id,
+        updater_email=creator_email,
+        heading=userport.utils.convert_to_markdown_heading(
+            text=section_heading_plain_text, level=child_heading_level),
+        html_section_id=child_html_section_id,
+        text=section_text_markdown
+    )
+    userport.db.insert_section_in_parent(
+        child_section=child_section, parent_section_id=parent_section_id, position=position)
+
+    # Complete upload in background.
+    page_section = userport.db.get_slack_section(id=page_id)
+    uploaded_url = userport.utils.create_documentation_url(
+        host_name=HARDCODED_HOSTNAME,
+        team_domain=team_domain,
+        page_html_id=page_section.html_section_id,
         section_html_id=child_html_section_id
     )
     complete_new_page_upload_in_background.delay(
