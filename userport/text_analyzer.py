@@ -2,6 +2,7 @@ from userport.openai_manager import OpenAIManager
 from typing import List
 from tenacity import retry, wait_random, stop_after_attempt
 from dataclasses import dataclass
+from pydantic import BaseModel
 from nltk.stem import PorterStemmer
 import json
 import logging
@@ -118,7 +119,24 @@ class TextAnalyzer:
         assert type(
             proper_nouns_list) == list, f"Expected Proper nouns to be {proper_nouns_list} to be a list"
 
-        return self.process_proper_nouns(proper_nouns_list)
+        return self.process_nouns(proper_nouns_list)
+
+    @retry(wait=wait_random(min=1, max=2), stop=stop_after_attempt(3))
+    def generate_all_nouns(self, text: str) -> List[str]:
+        """
+        Generate all nouns (common and proper) given text and return them as a result.
+        """
+        class AllNounsResponse(BaseModel):
+            """
+            Class to validate nouns generation response.
+            """
+            nouns: List[str]
+
+        all_nouns_prompt: str = self._generate_all_nouns_prompt(text)
+        json_response = self._generate_response(
+            prompt=all_nouns_prompt, json_response=True)
+        got_nouns = AllNounsResponse(**json.loads(json_response)).nouns
+        return self.process_nouns(got_nouns)
 
     def generate_answer_to_user_query(self, user_query: str, relevant_text_list: List[str], markdown: bool = False) -> AnswerFromSectionsResult:
         """
@@ -266,6 +284,18 @@ class TextAnalyzer:
                 'Extract the proper nouns from this Markdown formatted text and return the result as an array.'
                 )
 
+    def _generate_all_nouns_prompt(self, text: str) -> str:
+        """
+        Return prompt to generate all nouns (proper and common) from given text.
+        """
+        return ('Text:\n'
+                '"""\n'
+                f'{text}\n'
+                '"""\n\n'
+                'Extract all nouns from this text and return the result in a JSON object.'
+                ' They JSON object should contain a field "nouns" of type of Array containing all the nouns found.'
+                )
+
     def _create_answer_prompt(self, user_query: str, relevant_text_list: List[str], markdown: bool = False) -> str:
         """
         Helper to create answer from given user query and list of relevant text.
@@ -299,22 +329,23 @@ class TextAnalyzer:
         formatted_text_list.append(prompt)
         return "\n".join(formatted_text_list)
 
-    def process_proper_nouns(self, proper_nouns_list: List[str]) -> List[str]:
+    def process_nouns(self, nouns_list: List[str]) -> List[str]:
         """
         Since MongoDB allows mostly comparison operators in search query, we plan to use $in operator
         when filtering for docs during vector search. To use $in operator, each word in the list must be
-        comparable and processing like [1] splitting into multi word and [2] stemming which are not implemented out of the box
-        unlike in full text search.
+        comparable and processing steps like [1] splitting into multi word and [2] stemming are not implemented
+        out of the box unlike in full text search.
+
         This method is to perform this processing so sections are searchable with fewer false negatives.
         Some of the work done here are:
-        1. Split multi-word proper nouns into separate words in the list.
+        1. Split multi-word nouns into separate words in the list.
         2. Stemming each single word.
         """
-        final_proper_nouns_set = set()
-        for noun in proper_nouns_list:
-            final_proper_nouns_set.add(noun)
+        final_nouns_set = set()
+        for noun in nouns_list:
+            final_nouns_set.add(noun)
             for word in noun.split():
-                final_proper_nouns_set.add(word)
-                final_proper_nouns_set.add(self.ps.stem(word))
+                final_nouns_set.add(word)
+                final_nouns_set.add(self.ps.stem(word))
 
-        return list(final_proper_nouns_set)
+        return list(final_nouns_set)

@@ -31,11 +31,11 @@ class SlackInference:
         Answer user query by using documentation found in the user's team and returns
         answer as a RichTextBlock.
         """
-        # Fetch pronouns from given query text.
-        user_query_proper_nouns: List[str] = self.text_analyzer.generate_proper_nouns(
+        # Fetch all nouns from given query text.
+        user_query_nouns: List[str] = self.text_analyzer.generate_all_nouns(
             text=user_query)
         logging.info(
-            f"Got user query proper nouns: {user_query_proper_nouns} for user query: {user_query}")
+            f"Got nouns: {user_query_nouns} in user query: {user_query}")
 
         # TODO: We may need to tag the question type (e.g. definition, information, how-to, feedback, troubleshooting etc.).
         # This will help formulate answers better.
@@ -54,7 +54,7 @@ class SlackInference:
         relevant_sections: List[VectorSearchSlackSectionResult] = userport.db.vector_search_slack_sections(
             team_id=team_id,
             user_query_vector_embedding=user_query_vector_embedding,
-            user_query_proper_nouns=user_query_proper_nouns,
+            user_query_proper_nouns=user_query_nouns,
             document_limit=self.document_limit
         )
         if len(relevant_sections) == 0:
