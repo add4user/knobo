@@ -127,4 +127,4 @@ class SlackPageIndexer:
                     update_request=update_request
                 )
             )
-        userport.db.write_slack_sections(find_and_update_requests)
+        userport.db.update_slack_sections(find_and_update_requests)

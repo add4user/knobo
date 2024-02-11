@@ -80,6 +80,8 @@ class SlackInference:
         if not answer_result.information_found:
             return self._create_answer_not_found_block(top_section=relevant_sections[0])
 
+        logging.info(f"Generated answer: {answer_result.answer_text}")
+
         # Create answer block from markdown text.
         answer_block: RichTextBlock = self.markdown_converter.convert(
             markdown_text=answer_result.answer_text)

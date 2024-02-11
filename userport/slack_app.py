@@ -29,13 +29,20 @@ from userport.slack_modal_views import (
     PlaceDocNewPageSubmissionPayload,
     CreateDocViewFactory,
     PlaceDocViewFactory,
-    PlaceDocSelectParentOrPositionState
+    PlaceDocSelectParentOrPositionState,
+    EditDocShortcutPayload,
+    EditDocViewFactory,
+    EditDocBlockAction
 )
+from bson.objectid import ObjectId
 from userport.slack_html_gen import SlackHTMLGenerator
 from userport.slack_models import (
     SlackUpload,
     SlackUploadStatus,
-    SlackSection
+    SlackSection,
+    FindSlackSectionRequest,
+    UpdateSlackSectionRequest,
+    FindAndUpateSlackSectionRequest,
 )
 import userport.utils
 import userport.db
@@ -370,17 +377,22 @@ def handle_interactive_endpoint():
             shortcut_payload = MessageShortcutPayload(**payload_dict)
             if shortcut_payload.is_create_doc_shortcut():
                 # User wants to add a section to the documentation.
-                create_modal_from_shortcut_in_background.delay(
+                create_doc_from_shortcut_in_background.delay(
                     shortcut_payload.model_dump_json())
+        elif payload.is_global_shortcut():
+            if EditDocShortcutPayload(**payload_dict).get_callback_id() == EditDocShortcutPayload.CALLBACK_ID:
+                edit_doc_from_shortcut_in_background.delay(EditDocShortcutPayload(
+                    **payload_dict).model_dump_json(exclude_none=True))
         elif payload.is_view_interaction():
             # Handle Modal View closing or submission.
             if payload.is_view_closed():
-                # User has closed the view.
                 cancel_payload = CancelPayload(**payload_dict)
-                view_id = cancel_payload.get_view_id()
+                if cancel_payload.get_view_title() == CreateDocViewFactory.get_view_title():
+                    # User has closed the Create Doc view.
+                    cancel_payload = CancelPayload(**payload_dict)
+                    view_id = cancel_payload.get_view_id()
 
-                delete_upload_in_background.delay(view_id)
-
+                    delete_upload_in_background.delay(view_id)
             elif payload.is_view_submission():
                 # User has submitted the view.
                 submission_payload = SubmissionPayload(**payload_dict)
@@ -422,13 +434,14 @@ def handle_interactive_endpoint():
                             placed_doc_submission.model_dump_json(
                                 exclude_none=True)
                         )
+                elif submission_payload.get_view_title() == EditDocViewFactory.get_view_title():
+                    update_edited_section_in_background.delay(
+                        EditDocBlockAction(**payload_dict).model_dump_json(exclude_none=True))
 
         elif payload.is_block_actions():
             # Handle Block Elements related updates within a view.
             block_actions_payload = BlockActionsPayload(**payload_dict)
-            if block_actions_payload.is_page_selection_action_id() or \
-                block_actions_payload.is_parent_section_selection_action_id() or \
-                    block_actions_payload.is_position_selection_action_id():
+            if block_actions_payload.is_page_selection_action_id():
 
                 select_menu_actions_payload = SelectMenuBlockActionsPayload(
                     **payload_dict)
@@ -449,18 +462,28 @@ def handle_interactive_endpoint():
                         # Return updated view with options to place view in page.
                         update_view_with_place_document_selected_page_in_background.delay(
                             selected_menu_actions_json)
-                elif block_actions_payload.is_parent_section_selection_action_id():
-                    parent_state_json = PlaceDocSelectParentOrPositionState(
-                        **payload_dict).model_dump_json(exclude_none=True)
-                    # User has selected parent section.
-                    update_view_with_parent_section_in_background(
-                        parent_state_json)
-                elif block_actions_payload.is_position_selection_action_id():
-                    position_state_json = PlaceDocSelectParentOrPositionState(
-                        **payload_dict).model_dump_json(exclude_none=True)
-                    # User has selected insertion position of new section.
-                    update_view_with_new_layout_in_background(
-                        position_state_json)
+            elif block_actions_payload.is_parent_section_selection_action_id():
+                parent_state_json = PlaceDocSelectParentOrPositionState(
+                    **payload_dict).model_dump_json(exclude_none=True)
+                # User has selected parent section.
+                update_view_with_parent_section_in_background.delay(
+                    parent_state_json)
+            elif block_actions_payload.is_position_selection_action_id():
+                position_state_json = PlaceDocSelectParentOrPositionState(
+                    **payload_dict).model_dump_json(exclude_none=True)
+                # User has selected insertion position of new section.
+                update_view_with_new_layout_in_background.delay(
+                    position_state_json)
+            elif block_actions_payload.is_edit_select_page_action_id():
+                edit_doc_block_action = EditDocBlockAction(**payload_dict)
+                # User has selected page to edit.
+                display_edit_view_with_sections.delay(
+                    edit_doc_block_action.model_dump_json(exclude_none=True))
+            elif block_actions_payload.is_edit_select_section_action_id():
+                edit_doc_block_action = EditDocBlockAction(**payload_dict)
+                # Display section to edit.
+                display_edited_section.delay(
+                    edit_doc_block_action.model_dump_json(exclude_none=True))
 
     except Exception as e:
         print(f"Encountered error: {e} when parsing payload: {payload_dict}")
@@ -508,10 +531,12 @@ def answer_user_query_in_background(user_query: str, team_id: str, channel_id: s
 
 
 @shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})
-def create_modal_from_shortcut_in_background(create_doc_shortcut_json: str):
+def create_doc_from_shortcut_in_background(create_doc_shortcut_json: str):
     """
-    Create Modal View in shared task and write Slack upload to db after user initiates 
+    Create View in shared task and write Slack upload to db after user initiates 
     documentation creation from Shortcut.
+
+    This view will allow user to create a section and add it to existing documentation.
 
     We do this in Celery task since it can take > 3s in API path and
     result in user seeing an operation_timeout error message in the Slack channel.
@@ -540,6 +565,100 @@ def create_modal_from_shortcut_in_background(create_doc_shortcut_json: str):
     userport.db.create_slack_upload(creator_id=user_id, team_id=team_id, team_domain=team_domain, view_id=view_id,
                                     response_url=response_url, shortcut_callback_id=shortcut_callback_id,
                                     channel_id=channel_id, message_ts=message_ts)
+
+
+@shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})
+def edit_doc_from_shortcut_in_background(edit_doc_shortcut_json: str):
+    """
+    User has requested to edit shortcut, create a view and allow them to do it.
+    """
+    edit_doc_shortcut = EditDocShortcutPayload(
+        **json.loads(edit_doc_shortcut_json))
+
+    view = EditDocViewFactory().create_initial_view(
+        team_domain=edit_doc_shortcut.get_team_domain())
+    web_client = get_slack_web_client()
+    web_client.views_open(
+        trigger_id=edit_doc_shortcut.get_trigger_id(), view=view.model_dump(exclude_none=True))
+
+
+@shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})
+def display_edit_view_with_sections(edit_doc_block_action_json: str):
+    """
+    User has requested sections within a given page. We will update the view to
+    display the sections.
+    """
+    edit_doc_block_action = EditDocBlockAction(
+        **json.loads(edit_doc_block_action_json))
+
+    final_view = EditDocViewFactory().update_view_with_page_layout(edit_doc_block_action)
+
+    web_client = get_slack_web_client()
+    web_client.views_update(
+        view_id=edit_doc_block_action.get_view_id(),
+        hash=edit_doc_block_action.get_view_hash(),
+        view=final_view.model_dump(exclude_none=True),
+    )
+
+
+@shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})
+def display_edited_section(edit_doc_block_action_json: str):
+    """
+    Display Edited section by user.
+    """
+    edit_doc_block_action = EditDocBlockAction(
+        **json.loads(edit_doc_block_action_json))
+
+    # Remove existing section view if any.
+    first_view = EditDocViewFactory().remove_existing_section_info(edit_doc_block_action)
+    web_client = get_slack_web_client()
+    web_client.views_update(
+        view_id=edit_doc_block_action.get_view_id(),
+        hash=edit_doc_block_action.get_view_hash(),
+        view=first_view.model_dump(exclude_none=True),
+    )
+
+    # Add new section.
+    section_view = EditDocViewFactory().fetch_section_info(edit_doc_block_action)
+    web_client = get_slack_web_client()
+    # Not using Hash in the argument because it causes conflict. This is likely
+    # because the view hash has been updated in the first view update call above.
+    web_client.views_update(
+        view_id=edit_doc_block_action.get_view_id(),
+        view=section_view.model_dump(exclude_none=True),
+    )
+
+
+@shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})
+def update_edited_section_in_background(edit_doc_block_action_json: str):
+    """
+    Update Edited section in the database.
+    """
+    edit_doc_block_action = EditDocBlockAction(
+        **json.loads(edit_doc_block_action_json))
+
+    # Find heading level from existing section.
+    section_id = edit_doc_block_action.get_section_id()
+    section_heading_plain_text = edit_doc_block_action.get_section_heading()
+    section = userport.db.get_slack_section(section_id)
+    heading_level = userport.utils.get_heading_level(section.heading)
+    section_heading_markdown = userport.utils.convert_to_markdown_heading(
+        text=section_heading_plain_text, level=heading_level)
+    section_body_markdown = edit_doc_block_action.get_section_body_block().get_markdown()
+
+    # Update database.
+    find_request = FindSlackSectionRequest(id=ObjectId(section_id))
+    update_request = UpdateSlackSectionRequest(
+        heading=section_heading_markdown,
+        text=section_body_markdown,
+    )
+    find_and_update_request = FindAndUpateSlackSectionRequest(
+        find_request=find_request, update_request=update_request)
+    userport.db.update_slack_sections([find_and_update_request])
+
+    # Re-index the page.
+    indexer = SlackPageIndexer()
+    indexer.run(page_id=section.page_id)
 
 
 @shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})

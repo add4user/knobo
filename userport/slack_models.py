@@ -227,6 +227,8 @@ class UpdateSlackSectionRequest(BaseUpdateSubRequest):
     updater_email: str = Field(default="")
     child_section_ids: Optional[List[str]] = None
     last_updated_time: Optional[datetime] = None
+    heading: Optional[str] = None
+    text: Optional[str] = None
 
 
 class FindAndUpateSlackSectionRequest(BaseModel):

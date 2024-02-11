@@ -624,15 +624,19 @@ def get_slack_sections_with_parent(parent_section_id: str) -> List[SlackSection]
     return child_sections
 
 
-def write_slack_sections(find_and_update_requests: List[FindAndUpateSlackSectionRequest]):
+def update_slack_sections(find_and_update_requests: List[FindAndUpateSlackSectionRequest]):
     """
-    Write the given Slack sections transacationally.
+    Find and update the given Slack sections transacationally.
     """
     sections = _get_slack_sections()
     client = _get_mongo_client()
+    current_time: datetime = _get_current_time()
     with client.start_session() as session:
         with session.start_transaction():
             for request in find_and_update_requests:
+                # Update last updated time.
+                request.update_request.last_updated_time = current_time
+
                 if not sections.find_one_and_update(
                     _to_slack_find_request_dict(request.find_request),
                     _to_slack_update_request_dict(request.update_request)
