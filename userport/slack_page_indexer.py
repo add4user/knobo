@@ -48,8 +48,8 @@ class SlackPageIndexer:
                 f"Failed to find section: {str(start_section.id)} in page: {start_section.page_id}")
 
         # Populate metadata for each section that needs to be updated.
-        summary_of_sections_so_far = all_ordered_sections_in_page[
-            start_index].prev_sections_context if start_index > 0 else ""
+        summary_of_sections_so_far = self._initial_summary_of_sections(
+            start_index=start_index, all_ordered_sections_in_page=all_ordered_sections_in_page)
         all_nouns_set = set()
         find_and_update_requests_dict: Dict[str,
                                             FindAndUpateSlackSectionRequest] = {}
@@ -116,7 +116,8 @@ class SlackPageIndexer:
         else:
             detailed_summary = self.text_analyzer.generate_detailed_summary_with_context(
                 text=section_text, preceding_text=summary_of_sections_so_far, markdown=True)
-            page_text_seen_so_far = f"{summary_of_sections_so_far}\n\n{section.text}"
+            page_text_seen_so_far = self._page_text_so_far(
+                summary_of_sections_so_far=summary_of_sections_so_far, section_text=section_text)
 
         # Compute embedding of the detailed summary of current section.
         summary_vector_embedding: List[float] = self.text_analyzer.generate_vector_embedding(
@@ -141,6 +142,40 @@ class SlackPageIndexer:
             text=page_text_seen_so_far, markdown=True)
 
         return summary_of_sections_so_far, all_nouns_in_section
+
+    def _initial_summary_of_sections(self, start_index: int, all_ordered_sections_in_page: List[SlackSection]) -> str:
+        """
+        Helper to compute initial summary of section for the newly added
+        or edited section. The logic is complex to account for both newly
+        added and edited section.
+
+        start_index denotes the section in  all_ordered_sections_in_page at which indexing will start.
+        """
+        summary_of_sections_so_far = ""
+        if start_index > 0:
+            summary_of_sections_so_far = all_ordered_sections_in_page[
+                start_index].prev_sections_context
+            if summary_of_sections_so_far == "":
+                if start_index < len(all_ordered_sections_in_page) - 1:
+                    # This section has been newly added, so use context from next section.
+                    # The next section was the "previous" next section before this section
+                    # was added.
+                    summary_of_sections_so_far = all_ordered_sections_in_page[
+                        start_index+1].prev_sections_context
+                else:
+                    # Since this is the last section, we compute the summary from last section again.
+                    last_section = all_ordered_sections_in_page[-2]
+                    page_text_seen_so_far: str = self._page_text_so_far(
+                        summary_of_sections_so_far=last_section.prev_sections_context, section_text=self._get_combined_markdown_text(last_section))
+                    summary_of_sections_so_far = self.text_analyzer.generate_concise_summary(
+                        text=page_text_seen_so_far, markdown=True)
+        return summary_of_sections_so_far
+
+    def _page_text_so_far(self, summary_of_sections_so_far: str, section_text: str) -> str:
+        """
+        Helper to return page text so far from summary of sections and current section text.
+        """
+        return f"{summary_of_sections_so_far}\n\n{section_text}"
 
     def _get_combined_markdown_text(self, section: SlackSection) -> str:
         """

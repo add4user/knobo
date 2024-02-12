@@ -6,15 +6,14 @@ import logging
 from enum import Enum
 from typing import Dict, ClassVar, Optional, List
 from slack_sdk import WebClient
-from slack_sdk.webhook import WebhookClient
 from slack_sdk.web.slack_response import SlackResponse
 from dotenv import load_dotenv
-from flask import Blueprint, request, jsonify, g, render_template
+from flask import Blueprint, request, jsonify, g
 from userport.exceptions import APIException
 from pydantic import BaseModel, validator
 from userport.slack_page_indexer import SlackPageIndexer
 from userport.slack_inference import SlackInference
-from userport.slack_blocks import RichTextBlock, MessageBlock
+from userport.slack_blocks import MessageBlock, RichTextBlock
 from userport.slack_modal_views import (
     ViewCreatedResponse,
     InteractionPayload,
@@ -30,9 +29,10 @@ from userport.slack_modal_views import (
     CreateDocViewFactory,
     PlaceDocViewFactory,
     PlaceDocSelectParentOrPositionState,
-    EditDocShortcutPayload,
+    GlobalShortcutPayload,
     EditDocViewFactory,
-    EditDocBlockAction
+    EditDocBlockAction,
+    CommonShortcutPayload
 )
 from bson.objectid import ObjectId
 from userport.slack_html_gen import SlackHTMLGenerator
@@ -315,9 +315,6 @@ def handle_slash_command():
 
     We have 3 seconds to respond per https://api.slack.com/interactivity/slash-commands#responding_basic_receipt.
     """
-    # Uncomment for debugging.
-    # pprint.pprint(request.form)
-
     try:
         slash_command_request = SlashCommandRequest(**request.form)
         if slash_command_request.command == '/knobo-ask':
@@ -374,12 +371,17 @@ def handle_interactive_endpoint():
             shortcut_payload = MessageShortcutPayload(**payload_dict)
             if shortcut_payload.is_create_doc_shortcut():
                 # User wants to add a section to the documentation.
-                create_doc_from_shortcut_in_background.delay(
+                create_doc_from_message_shortcut_in_background.delay(
                     shortcut_payload.model_dump_json())
         elif payload.is_global_shortcut():
-            if EditDocShortcutPayload(**payload_dict).get_callback_id() == EditDocShortcutPayload.CALLBACK_ID:
-                edit_doc_from_shortcut_in_background.delay(EditDocShortcutPayload(
-                    **payload_dict).model_dump_json(exclude_none=True))
+            global_shortcut_payload = GlobalShortcutPayload(**payload_dict)
+            if global_shortcut_payload.get_callback_id() == GlobalShortcutPayload.CREATE_DOC_CALLBACK_ID:
+                create_doc_from_global_shortcut_in_background.delay(
+                    global_shortcut_payload.model_dump_json(exclude_none=True))
+            elif global_shortcut_payload.get_callback_id() == GlobalShortcutPayload.EDIT_DOC_CALLBACK_ID:
+                edit_doc_from_shortcut_in_background.delay(
+                    global_shortcut_payload.model_dump_json(exclude_none=True))
+
         elif payload.is_view_interaction():
             # Handle Modal View closing or submission.
             if payload.is_view_closed():
@@ -529,41 +531,63 @@ def answer_user_query_in_background(user_query: str, team_id: str, channel_id: s
         )
 
 
-@shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})
-def create_doc_from_shortcut_in_background(create_doc_shortcut_json: str):
+def _create_doc_common_in_background(common_payload: CommonShortcutPayload, initial_rich_text_block: RichTextBlock = None):
     """
-    Create View in shared task and write Slack upload to db after user initiates 
-    documentation creation from Shortcut.
-
-    This view will allow user to create a section and add it to existing documentation.
-
-    We do this in Celery task since it can take > 3s in API path and
-    result in user seeing an operation_timeout error message in the Slack channel.
+    Helper method to create documentation either from Message or Global shortcut
+    in background Celery task.
     """
-    create_doc_shortcut = MessageShortcutPayload(
-        **json.loads(create_doc_shortcut_json))
-
     # Create view.
-    initial_rich_text_block = create_doc_shortcut.get_rich_text_block()
     view = CreateDocViewFactory().create_view(
         initial_body_value=initial_rich_text_block)
     web_client = get_slack_web_client()
     slack_response: SlackResponse = web_client.views_open(
-        trigger_id=create_doc_shortcut.get_trigger_id(), view=view.model_dump(exclude_none=True))
+        trigger_id=common_payload.get_trigger_id(), view=view.model_dump(exclude_none=True))
     view_response = ViewCreatedResponse(**slack_response.data)
 
-    # Write upload to db.
-    user_id = create_doc_shortcut.get_user_id()
-    team_id = create_doc_shortcut.get_team_id()
-    team_domain = create_doc_shortcut.get_team_domain()
-    shortcut_callback_id = create_doc_shortcut.get_callback_id()
-    response_url = create_doc_shortcut.get_response_url()
-    channel_id = create_doc_shortcut.get_channel_id()
-    message_ts = create_doc_shortcut.get_message_ts()
+    # Create upload in db.
+    user_id = common_payload.get_user_id()
+    team_id = common_payload.get_team_id()
+    team_domain = common_payload.get_team_domain()
+    shortcut_callback_id = common_payload.get_callback_id()
     view_id = view_response.get_id()
     userport.db.create_slack_upload(creator_id=user_id, team_id=team_id, team_domain=team_domain, view_id=view_id,
-                                    response_url=response_url, shortcut_callback_id=shortcut_callback_id,
-                                    channel_id=channel_id, message_ts=message_ts)
+                                    shortcut_callback_id=shortcut_callback_id)
+
+
+@shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})
+def create_doc_from_message_shortcut_in_background(create_doc_shortcut_json: str):
+    """
+    Create View and write Slack upload to db after user initiates 
+    documentation creation from Message Shortcut.
+
+    There will be an initial body since the documentation is created from
+    Message itself.
+
+    We do this in Celery task since it can take > 3s in API path and
+    result in user seeing an operation_timeout error message in the Slack channel.
+    """
+    create_doc_dict = json.loads(create_doc_shortcut_json)
+    common_payload = CommonShortcutPayload(**create_doc_dict)
+    initial_rich_text_block = MessageShortcutPayload(
+        **create_doc_dict).get_rich_text_block()
+    _create_doc_common_in_background(
+        common_payload=common_payload, initial_rich_text_block=initial_rich_text_block)
+
+
+@shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})
+def create_doc_from_global_shortcut_in_background(create_doc_global_shortcut_json: str):
+    """
+    Create View and write Slack upload to db after user initiates 
+    documentation creation from Global shortcut.
+
+    There won't be any initial body unlike in Message shortcut.
+
+    We do this in Celery task since it can take > 3s in API path and
+    result in user seeing an operation_timeout error message in the Slack channel.
+    """
+    common_payload = CommonShortcutPayload(
+        **json.loads(create_doc_global_shortcut_json))
+    _create_doc_common_in_background(common_payload=common_payload)
 
 
 @shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})
@@ -571,7 +595,7 @@ def edit_doc_from_shortcut_in_background(edit_doc_shortcut_json: str):
     """
     User has requested to edit shortcut, create a view and allow them to do it.
     """
-    edit_doc_shortcut = EditDocShortcutPayload(
+    edit_doc_shortcut = GlobalShortcutPayload(
         **json.loads(edit_doc_shortcut_json))
 
     view = EditDocViewFactory().create_initial_view(
@@ -939,11 +963,12 @@ def complete_new_section_upload_in_background(upload_id: str, section_id: str, u
             f"Upload complete failed for Upload ID: {upload_id} with error: {e}")
         return
 
-    webhook = WebhookClient(slack_upload.response_url)
+    web_client = get_slack_web_client()
+
     if slack_upload.status != SlackUploadStatus.IN_PROGRESS:
-        # Send Webhook message since upload has started.
-        webhook.send(text="Documentation creation is in progress! I will ping you once it's done!",
-                     response_type=SlashCommandVisibility.PRIVATE.value)
+        # Post ephemeral message to user's DM with Knobo.
+        web_client.chat_postEphemeral(channel=slack_upload.creator_id, user=slack_upload.creator_id,
+                                      text="Documentation creation is in progress! I will ping you once it's done!")
 
         userport.db.update_slack_upload_status(
             upload_id=upload_id, upload_status=SlackUploadStatus.IN_PROGRESS)
@@ -958,5 +983,6 @@ def complete_new_section_upload_in_background(upload_id: str, section_id: str, u
             upload_id=upload_id, upload_status=SlackUploadStatus.COMPLETED)
         logging.info("Updated Upload Status to in Completed successfully")
 
-    webhook.send(text=f"Documentation upload complete! Available at {uploaded_url}",
-                 response_type=SlashCommandVisibility.PRIVATE.value)
+    # Post ephemeral message to user's DM with Knobo.
+    web_client.chat_postEphemeral(channel=slack_upload.creator_id, user=slack_upload.creator_id,
+                                  text=f"Documentation upload complete! Available at {uploaded_url}")

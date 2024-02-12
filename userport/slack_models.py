@@ -71,14 +71,6 @@ class SlackUpload(BaseModel):
     shortcut_callback_id: str = Field(...)
     # ID of the Modal view that needs to be tracked.
     view_id: str = Field(default="")
-    # Response URL of the Slash command that needs to be responded to.
-    response_url: str = Field(...)
-    # Channel ID whether we received the documentation request from.
-    # Set when we use Message Shortcut to create documentation.
-    channel_id: str = Field(default="")
-    # Message ID whether we received the documentation request from.
-    # Set when we use Message Shortcut to create documentation.
-    message_ts: str = Field(default="")
     # ID of the uploader.
     creator_id: str = Field(...)
     # Slack Workspace ID that the section is a part of.

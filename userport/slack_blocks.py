@@ -538,7 +538,7 @@ class RichTextInputElement(TextInputElement):
     Reference: https://api.slack.com/reference/block-kit/block-elements#rich_text_input
     """
     type: str = TextInputElement.RICH_TEXT_INPUT_VALUE
-    initial_value: RichTextBlock
+    initial_value: Optional[RichTextBlock] = None
 
     @validator("type")
     def validate_rich_text_type(cls, v):

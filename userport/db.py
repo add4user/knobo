@@ -338,14 +338,14 @@ def delete_upload_and_sections_transactionally(upload_id: str):
 
 
 def create_slack_upload(creator_id: str, team_id: str, team_domain: str, view_id: str,
-                        response_url: str, shortcut_callback_id: str, channel_id: str, message_ts: str) -> str:
+                        shortcut_callback_id: str) -> str:
     """
     Creates an Slack upload object and returns created ID.
     """
     current_time = _get_current_time()
     upload = SlackUpload(creator_id=creator_id, team_id=team_id, team_domain=team_domain, view_id=view_id,
-                         response_url=response_url, shortcut_callback_id=shortcut_callback_id,
-                         status=SlackUploadStatus.NOT_STARTED, channel_id=channel_id, message_ts=message_ts,
+                         shortcut_callback_id=shortcut_callback_id,
+                         status=SlackUploadStatus.NOT_STARTED,
                          created_time=current_time, last_updated_time=current_time)
 
     slack_uploads = _get_slack_uploads()

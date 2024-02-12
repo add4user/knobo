@@ -400,21 +400,12 @@ class ShortcutMessage(BaseModel):
         return self.get_rich_text_block().get_markdown()
 
 
-class MessageShortcutPayload(InteractionPayload):
+class CommonShortcutPayload(InteractionPayload):
     """
-    Class containing fields we care about in the Message Shortcut payload.
+    Class containing fields that are common between global and message shortcut payloads.
     """
-    CREATE_DOC_CALLBACK_ID: ClassVar[str] = 'create_doc_from_message'
-
-    class Channel(BaseModel):
-        id: str
-
-    message: ShortcutMessage
-    response_url: str
     callback_id: str
     trigger_id: str
-    channel: Channel
-    message_ts: str
 
     def get_team_id(self) -> str:
         """
@@ -434,12 +425,6 @@ class MessageShortcutPayload(InteractionPayload):
         """
         return self.user.id
 
-    def get_response_url(self) -> str:
-        """
-        Return Response URL associated with the payload.
-        """
-        return self.response_url
-
     def get_trigger_id(self) -> str:
         """
         Return Trigger ID of the pyload.
@@ -453,25 +438,20 @@ class MessageShortcutPayload(InteractionPayload):
         """
         return self.callback_id
 
-    def get_message_ts(self) -> str:
-        """
-        Return Message ID of the pyload. It is the identifier
-        for the Message that the shortcut is derived from.
-        """
-        return self.message_ts
 
-    def get_channel_id(self) -> str:
-        """
-        Return Channel ID of the pyload. It is the identifier
-        for the Channel that the shortcut is derived from.
-        """
-        return self.channel.id
+class MessageShortcutPayload(CommonShortcutPayload):
+    """
+    Class containing fields we care about in the Message Shortcut payload.
+    """
+    CREATE_DOC_CALLBACK_ID: ClassVar[str] = 'create_doc_from_message'
+
+    message: ShortcutMessage
 
     def is_create_doc_shortcut(self) -> bool:
         """
         Returns True if payload is for Create Doc Shortcut and False otherwise.
         """
-        return self.callback_id == MessageShortcutPayload.CREATE_DOC_CALLBACK_ID
+        return self.get_callback_id() == MessageShortcutPayload.CREATE_DOC_CALLBACK_ID
 
     def get_rich_text_block(self) -> RichTextBlock:
         """
@@ -479,39 +459,13 @@ class MessageShortcutPayload(InteractionPayload):
         """
         return self.message.get_rich_text_block()
 
-    def get_markdown(self) -> str:
-        """
-        Return shortcut message in markdown format.
-        """
-        return self.message.get_markdown()
 
-
-class EditDocShortcutPayload(InteractionPayload):
+class GlobalShortcutPayload(CommonShortcutPayload):
     """
-    Handle global shortcut to edit documentation.
+    Handle global shortcut to create or edit documentation.
     """
-    CALLBACK_ID: ClassVar[str] = 'edit_doc_global'
-
-    callback_id: str
-    trigger_id: str
-
-    def get_team_domain(self) -> str:
-        """
-        Return ID of the Slack Workspace.
-        """
-        return self.team.domain
-
-    def get_trigger_id(self) -> str:
-        """
-        Return Trigger ID.
-        """
-        return self.trigger_id
-
-    def get_callback_id(self) -> str:
-        """
-        Return callback ID.
-        """
-        return self.callback_id
+    EDIT_DOC_CALLBACK_ID: ClassVar[str] = 'edit_doc_global'
+    CREATE_DOC_CALLBACK_ID: ClassVar[str] = 'create_doc_global'
 
 
 class PlainTextObject(TextObject):
@@ -587,9 +541,9 @@ class CreateDocViewFactory:
         """
         return CreateDocViewFactory.VIEW_TITLE
 
-    def create_view(self, initial_body_value: RichTextBlock) -> BaseModalView:
+    def create_view(self, initial_body_value: RichTextBlock = None) -> BaseModalView:
         """
-        Returns view to Create document with given initial value for section body.
+        Returns view to Create document with given optional initial value for section body.
         """
         return BaseModalView(
             title=PlainTextObject(text=CreateDocViewFactory.get_view_title()),
