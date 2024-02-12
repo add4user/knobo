@@ -476,9 +476,10 @@ def create_slack_page_and_section(page_section: SlackSection, child_section: Sla
             return page_id, child_id
 
 
-def insert_section_in_parent(child_section: SlackSection, parent_section_id: str, position: int) -> (str, str):
+def insert_section_in_parent(child_section: SlackSection, parent_section_id: str, position: int) -> str:
     """
     Create Section and insert into given parent section at given position in a single transaction.
+    Returns ID of created section.
 
     We assume that all attributes except creation and updation time are populated
     correctly by the application layer in the inputs.
@@ -521,6 +522,8 @@ def insert_section_in_parent(child_section: SlackSection, parent_section_id: str
             ):
                 raise NotFoundException(
                     f"Failed to find parent section id : {parent_section_id} to update child ids: {child_section_ids}")
+
+            return child_id
 
 
 def get_slack_section(id: str) -> SlackSection:
@@ -687,6 +690,7 @@ def vector_search_slack_sections(team_id: str, user_query_vector_embedding: List
                 '_id': 1,
                 'heading': 1,
                 'text': 1,
+                'summary': 1,
                 'team_domain': 1,
                 'page_html_section_id': 1,
                 'html_section_id': 1,

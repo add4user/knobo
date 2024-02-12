@@ -233,7 +233,7 @@ class MarkdownToRichTextConverter:
         """
         # We want to also capture all whitespaces after the first one following * as part of the content.
         # To skip these whitespaces, use '^(\s*)([*])\s+(.*)$' instead.
-        pattern = '^(\s*)([*])\s(.*)$'
+        pattern = '^(\s*)([-*+])\s(.*)$'
         match = re.match(pattern=pattern, string=text)
         if not match:
             return False
@@ -498,7 +498,8 @@ if __name__ == "__main__":
     # markdown_text = "quoting something now\n\n> What is this? \n> \n> We don't know the answer.\n\n* Take a leap of faith.\n* And try\nnew section again"
     # markdown_text = '1. More complex list\n2. Another one\n    1. Three\n    2. Four [things](http://www.google.com) `that are` ~~messed~~ up\n        1. woops ***i got*** it\n\n\n1. Five\n    * Six\n    * Seven\n2. Eight'
     # markdown_text = 'ok test italicizing\n1. hello bro\n\ndone\n\n* bullet'
-    markdown_text = 'ok with quote **also**\n> hello\n\nok with ~~*preformatted*~~\n```\ncode block preformatted\n```\n* bullet bro'
+    # markdown_text = 'ok with quote **also**\n> hello\n\nok with ~~*preformatted*~~\n```\ncode block preformatted\n```\n* bullet bro'
+    markdown_text = '- test this\n    - here is ther\n    + what ab\n+ this also bro'
     # markdown_text = 'There is another thing we want to test\n1. hello ~~in between~~ ~~buik ~~~~*brother*~~ sister\n2. This [is ](http://www.google.com)[***a***](http://www.google.com) list\n    1. Sub list\n    2. Sub list <b>\n3. Thsi is the third elem\n\nWhat about unordered list:\n* Ek\n* Do'
 
     # This is the most complex example that we should definitely keep in the unit tests

@@ -6,7 +6,6 @@ from userport.slack_models import VectorSearchSlackSectionResult, SlackSection
 from userport.slack_blocks import (
     RichTextBlock,
     RichTextSectionElement,
-    RichTextListElement,
     RichTextObject
 )
 from userport.slack_html_gen import MarkdownToRichTextConverter
@@ -63,6 +62,9 @@ class SlackInference:
             return self.markdown_converter.convert(self.no_sections_found_text)
 
         # Generate answer from LLM.
+        # TODO: We may want to use section summary for Q&A. Section text is good for steps or direct references
+        # which may not be stored in summary. If we can combine both in the future, that would reduce false negatives
+        # further.
         relevant_text_list: List[str] = [
             self._get_combined_markdown_text(heading=section.heading, text=section.text) for section in relevant_sections]
 
@@ -80,7 +82,10 @@ class SlackInference:
         if not answer_result.information_found:
             return self._create_answer_not_found_block(top_section=relevant_sections[0])
 
-        logging.info(f"Generated answer: {answer_result.answer_text}")
+        logging.info(
+            f"\nChosen answer section index:  {answer_result.chosen_section_index}")
+        logging.info(
+            f"\nGenerated answer text: {answer_result.answer_text}")
 
         # Create answer block from markdown text.
         answer_block: RichTextBlock = self.markdown_converter.convert(

@@ -367,9 +367,6 @@ def handle_interactive_endpoint():
             f"Expected JSON payload in interaction, got errror when parsing: {e}")
         return interal_error_message, 200
 
-    # Uncomment whenever you need to find out new fields to use from the payload.
-    # pprint.pprint(payload_dict)
-
     try:
         payload = InteractionPayload(**payload_dict)
         if payload.is_message_shortcut():
@@ -658,7 +655,7 @@ def update_edited_section_in_background(edit_doc_block_action_json: str):
 
     # Re-index the page.
     indexer = SlackPageIndexer()
-    indexer.run(page_id=section.page_id)
+    indexer.run_from_section(section_id=section_id)
 
 
 @shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})
@@ -846,7 +843,7 @@ def create_new_page_in_background(view_id: str, new_page_title: str):
         page_html_id=page_html_section_id,
         section_html_id=child_html_section_id
     )
-    complete_new_page_upload_in_background.delay(
+    complete_new_section_upload_in_background.delay(
         upload_id, page_id, uploaded_url)
 
 
@@ -909,7 +906,7 @@ def create_section_inside_page_in_background(placed_doc_submission_json):
         html_section_id=child_html_section_id,
         page_html_section_id=page_section.html_section_id,
     )
-    userport.db.insert_section_in_parent(
+    child_id = userport.db.insert_section_in_parent(
         child_section=child_section, parent_section_id=parent_section_id, position=position)
 
     # Complete upload in background.
@@ -919,14 +916,14 @@ def create_section_inside_page_in_background(placed_doc_submission_json):
         page_html_id=page_section.html_section_id,
         section_html_id=child_html_section_id
     )
-    complete_new_page_upload_in_background.delay(
-        upload_id, page_id, uploaded_url)
+    complete_new_section_upload_in_background.delay(
+        upload_id, child_id, uploaded_url)
 
 
 @shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})
-def complete_new_page_upload_in_background(upload_id: str, page_id: str, uploaded_url: str):
+def complete_new_section_upload_in_background(upload_id: str, section_id: str, uploaded_url: str):
     """
-    Complete upload process so that the page and child sections can be indexed for retrieval.
+    Complete upload process so that the given section (and sections below in the same page) can be indexed for retrieval.
 
     Performed in Celery task so API call path can complete in less than 3s.
     """
@@ -953,7 +950,7 @@ def complete_new_page_upload_in_background(upload_id: str, page_id: str, uploade
     if slack_upload.status != SlackUploadStatus.COMPLETED:
         # Index the page and associated section.
         indexer = SlackPageIndexer()
-        indexer.run(page_id=page_id)
+        indexer.run_from_section(section_id=section_id)
 
         userport.db.update_slack_upload_status(
             upload_id=upload_id, upload_status=SlackUploadStatus.COMPLETED)

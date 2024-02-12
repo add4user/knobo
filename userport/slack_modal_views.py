@@ -1522,7 +1522,7 @@ class PlaceDocViewFactory:
         all_options.append(selection_option)
 
         # Options in between.
-        for i in range(1, len(slack_sections) - 1):
+        for i in range(1, len(slack_sections)):
             prev_section = slack_sections[i-1]
             section = slack_sections[i]
 
