@@ -5,8 +5,12 @@ from userport.text_analyzer import TextAnalyzer, AnswerFromSectionsResult
 from userport.slack_models import VectorSearchSlackSectionResult, SlackSection
 from userport.slack_blocks import (
     RichTextBlock,
+    MessageBlock,
+    Actionsblock,
+    ButtonElement,
     RichTextSectionElement,
-    RichTextObject
+    RichTextObject,
+    TextObject
 )
 from userport.slack_html_gen import MarkdownToRichTextConverter
 import userport.utils
@@ -16,6 +20,20 @@ class SlackInference:
     """
     Provides answers to users' questions from Slack.
     """
+    LIKE_EMOJI = ":thumbsup:"
+    DISLIKE_EMOJI = ":thumbsdown:"
+
+    LIKE_ACTION_ID = 'like_action_id'
+    LIKE_VALUE = 'like_answer'
+    DISLIKE_ACTION_ID = 'dislike_action_id'
+    DISLIKE_VALUE = 'dislike_answer'
+
+    CREATE_DOC_TEXT = 'Create new documentation'
+    CREATE_DOC_ACTION_ID = 'create_doc_action_id'
+    CREATE_DOC_VALUE = 'create_doc_answer'
+    EDIT_DOC_TEXT = 'Modify existing documentation'
+    EDIT_DOC_ACTION_ID = 'edit_doc_action_id'
+    EDIT_DOC_VALUE = 'edit_doc_answer'
 
     def __init__(self, hostname_url: str) -> None:
         self.hostname_url = hostname_url
@@ -25,10 +43,10 @@ class SlackInference:
         # Number of documents to return in vector search.
         self.document_limit = 5
 
-    def answer(self, user_query: str, team_id: str) -> RichTextBlock:
+    def answer(self, user_query: str, team_id: str) -> List[MessageBlock]:
         """
         Answer user query by using documentation found in the user's team and returns
-        answer as a RichTextBlock.
+        a list of Message blocks.
         """
         # Fetch all nouns from given query text.
         user_query_nouns: List[str] = self.text_analyzer.generate_all_nouns(
@@ -57,9 +75,25 @@ class SlackInference:
             document_limit=self.document_limit
         )
         if len(relevant_sections) == 0:
-            # No relevant sections found.
-            # TODO: Add block to ask user to add documentation to capture this answer.
-            return self.markdown_converter.convert(self.no_sections_found_text)
+            # No relevant sections found, give user option to create new documentation.
+            result_blocks: List[MessageBlock] = []
+            answer_block: RichTextBlock = self.markdown_converter.convert(
+                self.no_sections_found_text)
+            result_blocks.append(answer_block)
+
+            buttons_block = Actionsblock(
+                elements=[
+                    ButtonElement(
+                        text=TextObject(
+                            type=TextObject.TYPE_PLAIN_TEXT, text=self.CREATE_DOC_TEXT
+                        ),
+                        action_id=self.CREATE_DOC_ACTION_ID,
+                        value=self.CREATE_DOC_VALUE,
+                    )
+                ]
+            )
+            result_blocks.append(buttons_block)
+            return result_blocks
 
         # Generate answer from LLM.
         # TODO: We may want to use section summary for Q&A. Section text is good for steps or direct references
@@ -73,7 +107,7 @@ class SlackInference:
 
         return self._create_answer_block(answer_result=answer_result, relevant_sections=relevant_sections)
 
-    def _create_answer_block(self, answer_result: AnswerFromSectionsResult, relevant_sections: List[SlackSection]) -> RichTextBlock:
+    def _create_answer_block(self, answer_result: AnswerFromSectionsResult, relevant_sections: List[SlackSection]) -> List[MessageBlock]:
         """
         Creates answer block from given Answer result and relevant sections.
         """
@@ -86,6 +120,8 @@ class SlackInference:
             f"\nChosen answer section index:  {answer_result.chosen_section_index}")
         logging.info(
             f"\nGenerated answer text: {answer_result.answer_text}")
+
+        result_blocks: List[MessageBlock] = []
 
         # Create answer block from markdown text.
         answer_block: RichTextBlock = self.markdown_converter.convert(
@@ -102,19 +138,43 @@ class SlackInference:
         source_section_url_text: str = f'#{source_section.html_section_id}'
         answer_source_section = RichTextSectionElement(elements=[
             RichTextObject(type=RichTextObject.TYPE_TEXT,
-                           text="\nSource: "),
+                           text="\nSource : "),
             RichTextObject(type=RichTextObject.TYPE_LINK,
                            text=source_section_url_text, url=source_section_url)
         ])
         answer_block.elements.append(answer_source_section)
-        return answer_block
+        result_blocks.append(answer_block)
 
-    def _create_answer_not_found_block(self, top_section: SlackSection) -> RichTextBlock:
+        # Add Like and dislike button to get feedback.
+        buttons_block = Actionsblock(elements=[
+            ButtonElement(
+                text=TextObject(
+                    type=TextObject.TYPE_PLAIN_TEXT, text=self.LIKE_EMOJI, emoji=True
+                ),
+                action_id=self.LIKE_ACTION_ID,
+                value=self.LIKE_VALUE
+            ),
+            ButtonElement(
+                text=TextObject(
+                    type=TextObject.TYPE_PLAIN_TEXT, text=self.DISLIKE_EMOJI, emoji=True
+                ),
+                action_id=self.DISLIKE_ACTION_ID,
+                value=self.DISLIKE_VALUE
+            ),
+
+        ])
+        result_blocks.append(buttons_block)
+
+        return result_blocks
+
+    def _create_answer_not_found_block(self, top_section: SlackSection) -> List[MessageBlock]:
         """
         Creates block that explains answer was not found in given sections.
         """
-        answer_block = RichTextBlock(elements=[])
+        result_blocks: List[MessageBlock] = []
 
+        answer_block = RichTextBlock(elements=[])
+        # Add documentation URL.
         doc_url = userport.utils.create_documentation_url(
             host_name=self.hostname_url,
             team_domain=top_section.team_domain,
@@ -123,12 +183,36 @@ class SlackInference:
         )
         no_answer_section = RichTextSectionElement(elements=[
             RichTextObject(type=RichTextObject.TYPE_TEXT,
-                           text="I'm sorry, I didn't find an answer to that question in the "),
+                           text="I'm sorry, I didn't find an answer to that question in "),
             RichTextObject(type=RichTextObject.TYPE_LINK,
-                           text='documentation.', url=doc_url)
+                           text=f'#{top_section.html_section_id}.', url=doc_url),
+            RichTextObject(type=RichTextObject.TYPE_TEXT,
+                           text='\n\n')
         ])
         answer_block.elements.append(no_answer_section)
-        return answer_block
+        result_blocks.append(answer_block)
+
+        # Add buttons to add or modify documentation.
+        buttons_block = Actionsblock(elements=[
+            ButtonElement(
+                text=TextObject(
+                    type=TextObject.TYPE_PLAIN_TEXT, text=self.CREATE_DOC_TEXT
+                ),
+                action_id=self.CREATE_DOC_ACTION_ID,
+                value=self.CREATE_DOC_VALUE,
+            ),
+            ButtonElement(
+                text=TextObject(
+                    type=TextObject.TYPE_PLAIN_TEXT, text=self.EDIT_DOC_TEXT
+                ),
+                action_id=self.EDIT_DOC_ACTION_ID,
+                value=self.EDIT_DOC_VALUE,
+            ),
+
+        ])
+        result_blocks.append(buttons_block)
+
+        return result_blocks
 
     def _get_combined_markdown_text(self, heading: str, text: str) -> str:
         """

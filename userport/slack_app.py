@@ -14,7 +14,7 @@ from userport.exceptions import APIException
 from pydantic import BaseModel, validator
 from userport.slack_page_indexer import SlackPageIndexer
 from userport.slack_inference import SlackInference
-from userport.slack_blocks import RichTextBlock
+from userport.slack_blocks import RichTextBlock, MessageBlock
 from userport.slack_modal_views import (
     ViewCreatedResponse,
     InteractionPayload,
@@ -143,7 +143,7 @@ class IMMessageCreatedEventRequest(BaseModel):
         user: str
         channel: str
         channel_type: str
-        blocks: List[RichTextBlock]
+        blocks: List[MessageBlock]
 
         @validator("type")
         def validate_type(cls, v):
@@ -504,8 +504,10 @@ def render_documentation_page(team_domain: str, subpath: str):
 @shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})
 def answer_user_query_in_background(user_query: str, team_id: str, channel_id: str, user_id: str, private_visibility: bool):
     slack_inference = SlackInference(hostname_url=HARDCODED_HOSTNAME)
-    inference_answer_block: RichTextBlock = slack_inference.answer(
+    answer_blocks: List[MessageBlock] = slack_inference.answer(
         user_query=user_query, team_id=team_id)
+    answer_dicts = [block.model_dump(exclude_none=True)
+                    for block in answer_blocks]
 
     # Post answer to user as a chat message.
     web_client = get_slack_web_client()
@@ -514,7 +516,7 @@ def answer_user_query_in_background(user_query: str, team_id: str, channel_id: s
         web_client.chat_postEphemeral(
             channel=channel_id,
             user=user_id,
-            blocks=[inference_answer_block.model_dump(exclude_none=True)]
+            blocks=answer_dicts,
         )
     else:
         # Post public message.
@@ -523,7 +525,7 @@ def answer_user_query_in_background(user_query: str, team_id: str, channel_id: s
         # to not respond to bot posted messages and enter into a recursive loop like we observed in DMs.
         web_client.chat_postMessage(
             channel=user_id,
-            blocks=[inference_answer_block.model_dump(exclude_none=True)]
+            blocks=answer_dicts
         )
 
 

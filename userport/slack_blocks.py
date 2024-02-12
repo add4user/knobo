@@ -1,5 +1,5 @@
 from pydantic import BaseModel, validator, root_validator, ConfigDict
-from typing import List, Dict, Optional, ClassVar, Union
+from typing import List, Optional, ClassVar, Union
 
 """
 Module that contains the different Slack Blocks classes which are components
@@ -645,3 +645,63 @@ class DividerBlock(BaseModel):
 
     type: str = TYPE_VALUE
     block_id: Optional[str] = None
+
+
+class ButtonElement(BaseModel):
+    """
+    Class representing a Button element.
+
+    Reference: https://api.slack.com/reference/block-kit/block-elements#button
+    """
+    TYPE_VALUE: ClassVar[str] = 'button'
+    TEXT_TYPE_VALUE: ClassVar[str] = TextObject.TYPE_PLAIN_TEXT
+
+    type: str = TYPE_VALUE
+    text: TextObject
+    action_id: str
+    value: str
+
+    @validator("type")
+    def validate_type(cls, v):
+        if v != ButtonElement.TYPE_VALUE:
+            raise ValueError(
+                f"Expected {ButtonElement.TYPE_VALUE} as type value, got {v}")
+        return v
+
+    @validator("text")
+    def validate_text_type(cls, v):
+        if v.type != ButtonElement.TEXT_TYPE_VALUE:
+            raise ValueError(
+                f"Expected {ButtonElement.TEXT_TYPE_VALUE} as text type value, got {v}")
+        return v
+
+    @validator("text")
+    def validate_text_len(cls, v):
+        if len(v.text) > 75:
+            raise ValueError(
+                f"Expected Max length of text to be 75 characters, got {v}")
+        return v
+
+
+class Actionsblock(BaseModel):
+    """
+    Class representing an Action elements.
+
+    Reference: https://api.slack.com/reference/block-kit/blocks#actions
+    """
+    TYPE_VALUE: ClassVar[str] = 'actions'
+
+    type: str = TYPE_VALUE
+    elements: List[Union[ButtonElement, SelectMenuStaticElement]]
+    block_id: Optional[str] = None
+
+    @validator("type")
+    def validate_type(cls, v):
+        if v != Actionsblock.TYPE_VALUE:
+            raise ValueError(
+                f"Expected {Actionsblock.TYPE_VALUE} as type value, got {v}")
+        return v
+
+
+# Type used to represent Block objects that can used in Slack messages.
+MessageBlock = Union[RichTextBlock, Actionsblock]
