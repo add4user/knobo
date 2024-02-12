@@ -53,8 +53,13 @@ class SlackPageIndexer:
         all_nouns_set = set()
         find_and_update_requests_dict: Dict[str,
                                             FindAndUpateSlackSectionRequest] = {}
-        for i in range(start_index, len(all_ordered_sections_in_page)):
+        for i in range(len(all_ordered_sections_in_page)):
             section = all_ordered_sections_in_page[i]
+            if i < start_index:
+                # Just add existing nouns to all sections.
+                all_nouns_set.update(section.proper_nouns_in_section)
+                continue
+
             summary_of_sections_so_far, all_nouns_in_section = self._populate_metadata_in_section(
                 section=section, summary_of_sections_so_far=summary_of_sections_so_far)
             all_nouns_set.update(all_nouns_in_section)
@@ -65,8 +70,7 @@ class SlackPageIndexer:
                 summary=section.summary,
                 prev_sections_context=section.prev_sections_context,
                 summary_vector_embedding=section.summary_vector_embedding,
-                proper_nouns_in_section=section.proper_nouns_in_section,
-                proper_nouns_in_doc=section.proper_nouns_in_doc
+                proper_nouns_in_section=section.proper_nouns_in_section
             )
             find_and_update_request = FindAndUpateSlackSectionRequest(
                 find_request=find_request, update_request=update_request)
