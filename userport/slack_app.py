@@ -32,7 +32,7 @@ from userport.slack_modal_views import (
     GlobalShortcutPayload,
     EditDocViewFactory,
     EditDocBlockAction,
-    CommonShortcutPayload
+    CommonContextPayload
 )
 from bson.objectid import ObjectId
 from userport.slack_html_gen import SlackHTMLGenerator
@@ -376,8 +376,8 @@ def handle_interactive_endpoint():
         elif payload.is_global_shortcut():
             global_shortcut_payload = GlobalShortcutPayload(**payload_dict)
             if global_shortcut_payload.get_callback_id() == GlobalShortcutPayload.CREATE_DOC_CALLBACK_ID:
-                create_doc_from_global_shortcut_in_background.delay(
-                    global_shortcut_payload.model_dump_json(exclude_none=True))
+                create_doc_from_common_context_in_background.delay(
+                    CommonContextPayload(**payload_dict).model_dump_json(exclude_none=True))
             elif global_shortcut_payload.get_callback_id() == GlobalShortcutPayload.EDIT_DOC_CALLBACK_ID:
                 edit_doc_from_shortcut_in_background.delay(
                     global_shortcut_payload.model_dump_json(exclude_none=True))
@@ -483,6 +483,11 @@ def handle_interactive_endpoint():
                 # Display section to edit.
                 display_edited_section.delay(
                     edit_doc_block_action.model_dump_json(exclude_none=True))
+            elif block_actions_payload.is_create_doc_action_id():
+                create_doc_from_common_context_in_background.delay(
+                    CommonContextPayload(**payload_dict).model_dump_json(exclude_none=True))
+            elif block_actions_payload.is_edit_doc_action_id():
+                pprint.pprint(payload_dict)
 
     except Exception as e:
         print(f"Encountered error: {e} when parsing payload: {payload_dict}")
@@ -531,7 +536,7 @@ def answer_user_query_in_background(user_query: str, team_id: str, channel_id: s
         )
 
 
-def _create_doc_common_in_background(common_payload: CommonShortcutPayload, initial_rich_text_block: RichTextBlock = None):
+def _create_doc_common_in_background(common_payload: CommonContextPayload, initial_rich_text_block: RichTextBlock = None):
     """
     Helper method to create documentation either from Message or Global shortcut
     in background Celery task.
@@ -548,10 +553,9 @@ def _create_doc_common_in_background(common_payload: CommonShortcutPayload, init
     user_id = common_payload.get_user_id()
     team_id = common_payload.get_team_id()
     team_domain = common_payload.get_team_domain()
-    shortcut_callback_id = common_payload.get_callback_id()
     view_id = view_response.get_id()
-    userport.db.create_slack_upload(creator_id=user_id, team_id=team_id, team_domain=team_domain, view_id=view_id,
-                                    shortcut_callback_id=shortcut_callback_id)
+    userport.db.create_slack_upload(
+        creator_id=user_id, team_id=team_id, team_domain=team_domain, view_id=view_id)
 
 
 @shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})
@@ -567,7 +571,8 @@ def create_doc_from_message_shortcut_in_background(create_doc_shortcut_json: str
     result in user seeing an operation_timeout error message in the Slack channel.
     """
     create_doc_dict = json.loads(create_doc_shortcut_json)
-    common_payload = CommonShortcutPayload(**create_doc_dict)
+    # CommonContext is grandparent of MessageShortcutPayload so casting will work.
+    common_payload = CommonContextPayload(**create_doc_dict)
     initial_rich_text_block = MessageShortcutPayload(
         **create_doc_dict).get_rich_text_block()
     _create_doc_common_in_background(
@@ -575,18 +580,18 @@ def create_doc_from_message_shortcut_in_background(create_doc_shortcut_json: str
 
 
 @shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})
-def create_doc_from_global_shortcut_in_background(create_doc_global_shortcut_json: str):
+def create_doc_from_common_context_in_background(common_context_json: str):
     """
     Create View and write Slack upload to db after user initiates 
-    documentation creation from Global shortcut.
+    documentation creation from Global shortcut or Block Action from user message.
 
     There won't be any initial body unlike in Message shortcut.
 
     We do this in Celery task since it can take > 3s in API path and
     result in user seeing an operation_timeout error message in the Slack channel.
     """
-    common_payload = CommonShortcutPayload(
-        **json.loads(create_doc_global_shortcut_json))
+    common_payload = CommonContextPayload(
+        **json.loads(common_context_json))
     _create_doc_common_in_background(common_payload=common_payload)
 
 

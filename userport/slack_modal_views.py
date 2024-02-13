@@ -16,6 +16,7 @@ from userport.slack_blocks import (
     RichTextStyle
 )
 from userport.slack_models import SlackSection
+from userport.slack_inference import SlackInference
 from userport.markdown_parser import MarkdownToRichTextConverter
 from userport.utils import (
     get_heading_content,
@@ -180,6 +181,18 @@ class BlockActionsPayload(InteractionPayload):
         Returns True if Edit Documentation select section action ID event, False otherwise.
         """
         return len(self.actions) > 0 and self.actions[0].action_id == EditDocViewFactory.SELECT_SECTION_ACTION_ID
+
+    def is_create_doc_action_id(self) -> bool:
+        """
+        Returns True if Create documentation user action event, False otherwise.
+        """
+        return len(self.actions) > 0 and self.actions[0].action_id == SlackInference.CREATE_DOC_ACTION_ID
+
+    def is_edit_doc_action_id(self) -> bool:
+        """
+        Returns True if Edit documentation user action event, False otherwise.
+        """
+        return len(self.actions) > 0 and self.actions[0].action_id == SlackInference.EDIT_DOC_ACTION_ID
 
 
 class SelectMenuAction(BaseModel):
@@ -400,11 +413,12 @@ class ShortcutMessage(BaseModel):
         return self.get_rich_text_block().get_markdown()
 
 
-class CommonShortcutPayload(InteractionPayload):
+class CommonContextPayload(InteractionPayload):
     """
-    Class containing fields that are common between global and message shortcut payloads.
+    Class containing fields that are common between:
+    1. global and message shortcut payloads
+    2. Block Actions payload.
     """
-    callback_id: str
     trigger_id: str
 
     def get_team_id(self) -> str:
@@ -431,9 +445,17 @@ class CommonShortcutPayload(InteractionPayload):
         """
         return self.trigger_id
 
+
+class CommonShortcutPayload(CommonContextPayload):
+    """
+    Class containing fields that are common between global and message shortcut payloads
+    and also global action payloads.
+    """
+    callback_id: str
+
     def get_callback_id(self) -> str:
         """
-        Return Callback ID of the pyload. It is the identifier
+        Return Callback ID of the payload. It is the identifier
         for the Shortcut.
         """
         return self.callback_id

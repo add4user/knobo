@@ -67,8 +67,6 @@ class SlackUpload(BaseModel):
     if the upload fails.
     """
     id: Optional[PyObjectId] = Field(alias="_id", default=None)
-    # Callback ID of associated the Shortcut.
-    shortcut_callback_id: str = Field(...)
     # ID of the Modal view that needs to be tracked.
     view_id: str = Field(default="")
     # ID of the uploader.

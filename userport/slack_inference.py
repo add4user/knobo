@@ -43,6 +43,20 @@ class SlackInference:
         # Number of documents to return in vector search.
         self.document_limit = 5
 
+    @staticmethod
+    def get_create_doc_action_id() -> str:
+        """
+        Returns actions ID associatedw with create documentation.
+        """
+        return SlackInference.CREATE_DOC_ACTION_ID
+
+    @staticmethod
+    def get_edit_doc_action_id() -> str:
+        """
+        Returns actions ID associatedw with edit documentation.
+        """
+        return SlackInference.EDIT_DOC_ACTION_ID
+
     def answer(self, user_query: str, team_id: str) -> List[MessageBlock]:
         """
         Answer user query by using documentation found in the user's team and returns

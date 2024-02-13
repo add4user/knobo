@@ -337,15 +337,13 @@ def delete_upload_and_sections_transactionally(upload_id: str):
                     f"Expected 1 doc to be deleted, got {deleted_result.deleted_count} deleted")
 
 
-def create_slack_upload(creator_id: str, team_id: str, team_domain: str, view_id: str,
-                        shortcut_callback_id: str) -> str:
+def create_slack_upload(creator_id: str, team_id: str, team_domain: str, view_id: str) -> str:
     """
     Creates an Slack upload object and returns created ID.
     """
     current_time = _get_current_time()
-    upload = SlackUpload(creator_id=creator_id, team_id=team_id, team_domain=team_domain, view_id=view_id,
-                         shortcut_callback_id=shortcut_callback_id,
-                         status=SlackUploadStatus.NOT_STARTED,
+    upload = SlackUpload(creator_id=creator_id, team_id=team_id, team_domain=team_domain,
+                         view_id=view_id, status=SlackUploadStatus.NOT_STARTED,
                          created_time=current_time, last_updated_time=current_time)
 
     slack_uploads = _get_slack_uploads()
