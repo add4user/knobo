@@ -691,7 +691,7 @@ def update_edited_section_in_background(edit_doc_block_action_json: str, user_id
     # Notify user via ephemeral message to user's DM with Knobo.
     web_client = get_slack_web_client()
     web_client.chat_postEphemeral(channel=user_id, user=user_id,
-                                  text="Modification in progress! I will ping you once it's done!")
+                                  text="Section Edit in progress! I will ping you once it's done!")
 
     # Re-index the page.
     indexer = SlackPageIndexer()
@@ -699,7 +699,7 @@ def update_edited_section_in_background(edit_doc_block_action_json: str, user_id
 
     # Notify user that edit indexing is complete.
     web_client.chat_postEphemeral(channel=user_id, user=user_id,
-                                  text=f"Modification complete for section: #{section.html_section_id}!")
+                                  text=f"Edit complete for section: #{section.html_section_id}!")
 
 
 @shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})
@@ -986,7 +986,7 @@ def complete_new_section_upload_in_background(upload_id: str, section_id: str, u
     if slack_upload.status != SlackUploadStatus.IN_PROGRESS:
         # Post ephemeral message to user's DM with Knobo.
         web_client.chat_postEphemeral(channel=slack_upload.creator_id, user=slack_upload.creator_id,
-                                      text="Documentation creation is in progress! I will ping you once it's done!")
+                                      text="Section creation is in progress! I will ping you once it's done!")
 
         userport.db.update_slack_upload_status(
             upload_id=upload_id, upload_status=SlackUploadStatus.IN_PROGRESS)
@@ -1003,4 +1003,4 @@ def complete_new_section_upload_in_background(upload_id: str, section_id: str, u
 
     # Post ephemeral message to user's DM with Knobo.
     web_client.chat_postEphemeral(channel=slack_upload.creator_id, user=slack_upload.creator_id,
-                                  text=f"Documentation upload complete! Available at {uploaded_url}")
+                                  text=f"Section creation complete! Available at {uploaded_url}")

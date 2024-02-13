@@ -28,10 +28,10 @@ class SlackInference:
     DISLIKE_ACTION_ID = 'dislike_action_id'
     DISLIKE_VALUE = 'dislike_answer'
 
-    CREATE_DOC_TEXT = 'Create new documentation'
+    CREATE_DOC_TEXT = 'Create a new section'
     CREATE_DOC_ACTION_ID = 'create_doc_action_id'
     CREATE_DOC_VALUE = 'create_doc_answer'
-    EDIT_DOC_TEXT = 'Modify existing documentation'
+    EDIT_DOC_TEXT = 'Edit existing section'
     EDIT_DOC_ACTION_ID = 'edit_doc_action_id'
     EDIT_DOC_VALUE = 'edit_doc_answer'
 
@@ -39,7 +39,7 @@ class SlackInference:
         self.hostname_url = hostname_url
         self.text_analyzer = TextAnalyzer(inference=True)
         self.markdown_converter = MarkdownToRichTextConverter()
-        self.no_sections_found_text = "I'm sorry, I didn't find any documentation that could contain an answer to this question."
+        self.no_sections_found_text = "I'm sorry, I didn't find any sections that could contain an answer to this question."
         # Number of documents to return in vector search.
         self.document_limit = 5
 
