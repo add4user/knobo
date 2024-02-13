@@ -435,7 +435,10 @@ def handle_interactive_endpoint():
                         )
                 elif submission_payload.get_view_title() == EditDocViewFactory.get_view_title():
                     update_edited_section_in_background.delay(
-                        EditDocBlockAction(**payload_dict).model_dump_json(exclude_none=True))
+                        EditDocBlockAction(
+                            **payload_dict).model_dump_json(exclude_none=True),
+                        submission_payload.get_user_id()
+                    )
 
         elif payload.is_block_actions():
             # Handle Block Elements related updates within a view.
@@ -659,9 +662,9 @@ def display_edited_section(edit_doc_block_action_json: str):
 
 
 @shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})
-def update_edited_section_in_background(edit_doc_block_action_json: str):
+def update_edited_section_in_background(edit_doc_block_action_json: str, user_id: str):
     """
-    Update Edited section in the database.
+    Update Edited section in the database and notify user of progress.
     """
     edit_doc_block_action = EditDocBlockAction(
         **json.loads(edit_doc_block_action_json))
@@ -685,9 +688,18 @@ def update_edited_section_in_background(edit_doc_block_action_json: str):
         find_request=find_request, update_request=update_request)
     userport.db.update_slack_sections([find_and_update_request])
 
+    # Notify user via ephemeral message to user's DM with Knobo.
+    web_client = get_slack_web_client()
+    web_client.chat_postEphemeral(channel=user_id, user=user_id,
+                                  text="Modification in progress! I will ping you once it's done!")
+
     # Re-index the page.
     indexer = SlackPageIndexer()
     indexer.run_from_section(section_id=section_id)
+
+    # Notify user that edit indexing is complete.
+    web_client.chat_postEphemeral(channel=user_id, user=user_id,
+                                  text=f"Modification complete for section: #{section.html_section_id}!")
 
 
 @shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})

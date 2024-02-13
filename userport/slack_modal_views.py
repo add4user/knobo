@@ -33,19 +33,31 @@ Reference: https://api.slack.com/reference/interaction-payloads/views#view_submi
 """
 
 
+class SlackTeam(BaseModel):
+    """
+    Represents a Slack Team.
+
+    We only care about these attributes.
+    """
+    id: str
+    domain: str
+
+
+class SlackUser(BaseModel):
+    """
+    Represents a Slack user.
+
+    We only care about these attributes.
+    """
+    id: str
+
+
 class InteractionPayload(BaseModel):
     """
     Common class for Message Shortcut, View submission or View Cancel payloads.
 
     Reference: https://api.slack.com/surfaces/modals#interactions
     """
-    class SlackTeam(BaseModel):
-        id: str
-        domain: str
-
-    class SlackUser(BaseModel):
-        id: str
-
     type: str
     team: SlackTeam
     user: SlackUser
@@ -135,12 +147,19 @@ class SubmissionPayload(InteractionPayload):
     Class containing fields we care about in View submission payload.
     """
     view: CommonView
+    user: SlackUser
 
     def get_view_title(self) -> str:
         """
         Get View Title of given View submission Payload.
         """
         return self.view.get_title()
+
+    def get_user_id(self) -> str:
+        """
+        Returns ID of user submitting the view.
+        """
+        return self.user.id
 
 
 class BlockActionsPayload(InteractionPayload):
