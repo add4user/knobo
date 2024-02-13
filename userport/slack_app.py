@@ -379,8 +379,8 @@ def handle_interactive_endpoint():
                 create_doc_from_common_context_in_background.delay(
                     CommonContextPayload(**payload_dict).model_dump_json(exclude_none=True))
             elif global_shortcut_payload.get_callback_id() == GlobalShortcutPayload.EDIT_DOC_CALLBACK_ID:
-                edit_doc_from_shortcut_in_background.delay(
-                    global_shortcut_payload.model_dump_json(exclude_none=True))
+                edit_doc_from_common_context_in_background.delay(
+                    CommonContextPayload(**payload_dict).model_dump_json(exclude_none=True))
 
         elif payload.is_view_interaction():
             # Handle Modal View closing or submission.
@@ -487,7 +487,8 @@ def handle_interactive_endpoint():
                 create_doc_from_common_context_in_background.delay(
                     CommonContextPayload(**payload_dict).model_dump_json(exclude_none=True))
             elif block_actions_payload.is_edit_doc_action_id():
-                pprint.pprint(payload_dict)
+                edit_doc_from_common_context_in_background.delay(
+                    CommonContextPayload(**payload_dict).model_dump_json(exclude_none=True))
 
     except Exception as e:
         print(f"Encountered error: {e} when parsing payload: {payload_dict}")
@@ -596,18 +597,18 @@ def create_doc_from_common_context_in_background(common_context_json: str):
 
 
 @shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})
-def edit_doc_from_shortcut_in_background(edit_doc_shortcut_json: str):
+def edit_doc_from_common_context_in_background(common_context_json: str):
     """
     User has requested to edit shortcut, create a view and allow them to do it.
     """
-    edit_doc_shortcut = GlobalShortcutPayload(
-        **json.loads(edit_doc_shortcut_json))
+    common_context_payload = CommonContextPayload(
+        **json.loads(common_context_json))
 
     view = EditDocViewFactory().create_initial_view(
-        team_domain=edit_doc_shortcut.get_team_domain())
+        team_domain=common_context_payload.get_team_domain())
     web_client = get_slack_web_client()
     web_client.views_open(
-        trigger_id=edit_doc_shortcut.get_trigger_id(), view=view.model_dump(exclude_none=True))
+        trigger_id=common_context_payload.get_trigger_id(), view=view.model_dump(exclude_none=True))
 
 
 @shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})
