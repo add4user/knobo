@@ -22,6 +22,15 @@ class AnswerFromSectionsResult:
     answer_text: str = ""
 
 
+class LLMResult(BaseModel):
+    """
+    Contains information about whether LLM was able to find answer
+    to user query and if so, the associated answer as well.
+    """
+    information_found: bool
+    answer: str
+
+
 class TextAnalyzer:
     """
     Contains helpers to summarize text, generate embeddings and generate proper nouns.
@@ -185,6 +194,22 @@ class TextAnalyzer:
 
         return result
 
+    def answer_user_query(self, user_query: str, reference_text: str) -> LLMResult:
+        """
+        Answers user query using reference text as Knowledge base.
+        """
+        prompt: str = self._create_section_result_prompt(
+            user_query=user_query, section_text=reference_text)
+        logging.info(f"Section result prompt: {prompt}")
+
+        json_response = self._generate_response(
+            prompt=prompt, json_response=True)
+        llm_result = LLMResult(**json.loads(json_response))
+        logging.info(
+            f"Information found in section: {llm_result.information_found}")
+        logging.info(f"Answer from LLM for section: {llm_result.answer}")
+        return llm_result
+
     def _generate_response(self, prompt: str, json_response: bool = False) -> str:
         """
         Helper to generate response from OpenAI.
@@ -200,7 +225,7 @@ class TextAnalyzer:
 
     def _create_summary_prompt(self, text: str, markdown: bool = False) -> str:
         """
-        Helper to create a summary prompt. The prompt is slightly different if
+        Helper to create a summary prompt in a concise manner. The prompt is slightly different if
         text is formatted as markdown.
         """
         if not markdown:
@@ -215,7 +240,7 @@ class TextAnalyzer:
                 '"""\n'
                 f'{text}\n'
                 '"""\n\n'
-                'Explain the content in this text using only the information in the text. The text is Markdown formatted.'
+                'Explain the content in this text in a concise manner using only the information in the text. The text is Markdown formatted, do not mention that in the explanation.'
                 )
 
     def _create_concise_summary_prompt(self, text: str, markdown: bool = False) -> str:
@@ -238,7 +263,7 @@ class TextAnalyzer:
 
     def _create_detailed_summary_with_context_prompt(self, text: str, context: str, markdown: bool = False) -> str:
         """
-        Helper to createsa detailed summary prompt for given text and context. The prompt is slightly different if
+        Helper to create a concise summary prompt for given text and context. The prompt is slightly different if
         text is formatted as markdown.
         """
         if not markdown:
@@ -261,7 +286,7 @@ class TextAnalyzer:
                 '"""\n'
                 f'{text}\n'
                 '"""\n\n'
-                'Explain the content in the current text using preceding text as context. The current text is Markdown formatted. The preceding text is the summary of previous sections in the document.'
+                'Explain the content in the current text in a concise manner using preceding text as context. The preceding text is the summary of previous sections in the document. The current text is Markdown formatted, do not mention that in the explanation.'
                 )
 
     def _create_proper_nouns_prompt(self, text: str, markdown: bool = False) -> str:
@@ -321,13 +346,32 @@ class TextAnalyzer:
                       ' The "information_found" field should be set to false if the answer is not contained in the Sections above.'
                       ' Do not mention the the Section number in the "answer" field.')
         else:
+            # prompt = ('Answer the User query using only the information in the Sections above.'
+            #           ' Return the result as a JSON object with "information_found" as boolean field, "answer" as string field and "section_number" as int field.'
+            #           ' The "information_found" field should be set to false if the answer is not contained in the Sections above.'
+            #           ' The "answer" field should be Markdown formatted text.'
+            #           ' Do not mention the the Section number in the "answer" field.')
             prompt = ('Answer the User query using only the information in the Sections above.'
                       ' Return the result as a JSON object with "information_found" as boolean field, "answer" as string field and "section_number" as int field.'
                       ' The "information_found" field should be set to false if the answer is not contained in the Sections above.'
                       ' The "answer" field should be Markdown formatted text.'
+                      ' The "section_number" field should indicate which section above contains the answers.'
                       ' Do not mention the the Section number in the "answer" field.')
         formatted_text_list.append(prompt)
         return "\n".join(formatted_text_list)
+
+    def _create_section_result_prompt(self, user_query: str, section_text: str) -> str:
+        """
+        Returns prompt to check whether given section text answers user query.
+        """
+        return (f'{section_text}\n\n\n'
+                'User Query:\n'
+                f'{user_query}\n\n'
+                'Answer the User Query using only the information in the Markdown formatted text above.\n'
+                'Return the result as a JSON object with "information_found" as boolean field, "answer" as string field.\n'
+                'The "information_found" should be set to true only if the answer is found in the text and false otherwise.\n'
+                'The "answer" field should contain Markdown formatted text.'
+                )
 
     def process_nouns(self, nouns_list: List[str]) -> List[str]:
         """

@@ -22,8 +22,6 @@ class SlackPageIndexer:
 
     def __init__(self) -> None:
         self.text_analyzer = TextAnalyzer(debug=False)
-        self.summary_so_far: str = ""
-        self.all_sections_in_page: List[SlackSection] = []
 
     def run_from_section(self, section_id: str):
         """

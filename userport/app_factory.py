@@ -32,7 +32,9 @@ def create_app():
         MONGO_DB_NAME='db',
         CELERY=dict(
             broker_url="redis://localhost",
-            task_ignore_result=True,
+            # We will only return result where we need it.
+            result_backend="redis://localhost",
+            task_ignore_result=False,
         ),
     )
     app.register_blueprint(auth.bp)

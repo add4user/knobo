@@ -26,7 +26,8 @@ from userport.slack_models import (
     FindSlackSectionRequest,
     UpdateSlackSectionRequest,
     FindAndUpateSlackSectionRequest,
-    VectorSearchSlackSectionResult
+    VS3Record,
+    VS3Result
 )
 from datetime import datetime, timezone
 from bson.objectid import ObjectId
@@ -647,9 +648,10 @@ def update_slack_sections(find_and_update_requests: List[FindAndUpateSlackSectio
 
 
 def vector_search_slack_sections(team_id: str, user_query_vector_embedding: List[float],
-                                 user_query_proper_nouns: List[str], document_limit: int) -> List[VectorSearchSlackSectionResult]:
+                                 user_query_proper_nouns: List[str], document_limit: int) -> VS3Result:
     """
-    Performs vector search to retrieve most relevant sections associated with given user query.
+    Performs vector search to retrieve most relevant records associated with given user query
+    and returns them.
     """
     # Construct filters for team and proper nouns.
     filters_list: List[Dict] = []
@@ -700,10 +702,10 @@ def vector_search_slack_sections(team_id: str, user_query_vector_embedding: List
     ]
     results = sections.aggregate(pipeline)
 
-    vss_results: List[VectorSearchSlackSectionResult] = []
+    records: List[VS3Record] = []
     for res in results:
-        vss_results.append(VectorSearchSlackSectionResult(**res))
-    return vss_results
+        records.append(VS3Record(**res))
+    return VS3Result(records=records)
 
 
 def vector_search_sections(user_org_domain: str, query_vector_embedding: List[float], query_proper_nouns: List[str], document_limit: int) -> List[VectorSearchSectionResult]:

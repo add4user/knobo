@@ -7,6 +7,32 @@ import re
 from datetime import datetime
 from typing import List
 from urllib.parse import urljoin, urlparse
+from slack_sdk import WebClient
+import os
+from flask import g
+
+# TODO: Change to custom domain in production and make sure it's not hardcoded.
+_HARDCODED_HOSTNAME_URL = 'https://fb5e-2409-40f2-1041-7619-857c-13e-96b0-e84d.ngrok-free.app'
+
+
+def get_slack_web_client() -> WebClient:
+    """
+    Helper to get slack web client. Works only in
+    Flask request context.
+    """
+    if 'slack_web_client' not in g:
+        # Create a new client and connect to the server
+        g.slack_web_client = WebClient(
+            token=os.environ['SLACK_OAUTH_BOT_TOKEN'])
+
+    return g.slack_web_client
+
+
+def get_hostname_url() -> str:
+    """
+    Helper to return Hostname URL.
+    """
+    return _HARDCODED_HOSTNAME_URL
 
 
 def get_domain_from_email(email: str):

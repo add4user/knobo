@@ -1,8 +1,10 @@
 import logging
-from typing import List
+from typing import List, Dict, Optional
 import userport.db
-from userport.text_analyzer import TextAnalyzer, AnswerFromSectionsResult
-from userport.slack_models import VectorSearchSlackSectionResult, SlackSection
+import json
+from pydantic import BaseModel
+from userport.text_analyzer import TextAnalyzer, LLMResult
+from userport.slack_models import VS3Record, VS3Result
 from userport.slack_blocks import (
     RichTextBlock,
     MessageBlock,
@@ -14,6 +16,22 @@ from userport.slack_blocks import (
 )
 from userport.slack_html_gen import MarkdownToRichTextConverter
 import userport.utils
+from userport.utils import get_slack_web_client, get_hostname_url
+from celery import shared_task, chord
+
+
+class SlackInferenceRequest(BaseModel):
+    """
+    Simpler container to hold all input parameters
+    used during inference.
+    """
+    user_query: str
+    team_id: str
+    channel_id: str
+    user_id: str
+    private_visibility: bool
+    vs3_result: Optional[VS3Result] = None
+    document_limit: int = 5
 
 
 class SlackInference:
@@ -35,13 +53,7 @@ class SlackInference:
     EDIT_DOC_ACTION_ID = 'edit_doc_action_id'
     EDIT_DOC_VALUE = 'edit_doc_answer'
 
-    def __init__(self, hostname_url: str) -> None:
-        self.hostname_url = hostname_url
-        self.text_analyzer = TextAnalyzer(inference=True)
-        self.markdown_converter = MarkdownToRichTextConverter()
-        self.no_sections_found_text = "I'm sorry, I didn't find any sections that could contain an answer to this question."
-        # Number of documents to return in vector search.
-        self.document_limit = 5
+    NO_SECTIONS_FOUND_TEXT = "I'm sorry, I didn't find any sections that could contain an answer to this question."
 
     @staticmethod
     def get_create_doc_action_id() -> str:
@@ -57,16 +69,14 @@ class SlackInference:
         """
         return SlackInference.EDIT_DOC_ACTION_ID
 
-    def answer(self, user_query: str, team_id: str) -> List[MessageBlock]:
+    def answer(request: SlackInferenceRequest):
         """
-        Answer user query by using documentation found in the user's team and returns
-        a list of Message blocks.
+        Answering user query within a given team by parallelizing calls to
+        LLM in order to increase accuracy and reduce latency.
+
+        Returns a list of Dictionaries of Slack message blocks containing the formatted answer.
+        We return dictionaries since worker tasks need to return serializable objects.
         """
-        # Fetch all nouns from given query text.
-        user_query_nouns: List[str] = self.text_analyzer.generate_all_nouns(
-            text=user_query)
-        logging.info(
-            f"Got nouns: {user_query_nouns} in user query: {user_query}")
 
         # TODO: We may need to tag the question type (e.g. definition, information, how-to, feedback, troubleshooting etc.).
         # This will help formulate answers better.
@@ -76,80 +86,244 @@ class SlackInference:
         # will change whenever new proper nouns are found in the question or maybe we combine the previous proper noun
         # with current proper nouns if there are any pronouns in the question.
 
-        # Fetch embedding for user query.
-        user_query_vector_embedding: List[float] = self.text_analyzer.generate_vector_embedding(
-            text=user_query)
-        logging.info(f"Generated vector embedding for user query {user_query}")
+        # Compute in parallel.
+        header = [SlackInference._gen_query_nouns_async.s(request.user_query),
+                  SlackInference._gen_query_embedding_async.s(request.user_query)]
+        callback = SlackInference.fetch_answer_from_sections.s(
+            request_json=request.model_dump_json())
+
+        # Invoke chord.
+        chord(header)(callback)
+
+    @shared_task
+    def fetch_answer_from_sections(prev_result_list, request_json: str) -> List[Dict]:
+        request = SlackInferenceRequest(**json.loads(request_json))
+
+        query_nouns: List[str] = prev_result_list[0]
+        query_vector_embedding: List[float] = prev_result_list[1]
+
+        # Need to wait for results from queries above since it is needed for vector search.
+        logging.info(
+            f"Got nouns: {query_nouns} in user query: {request.user_query}")
+
+        logging.info(
+            f"Generated vector embedding for user query {request.user_query}")
 
         # Vector search for similar sections.
-        relevant_sections: List[VectorSearchSlackSectionResult] = userport.db.vector_search_slack_sections(
-            team_id=team_id,
-            user_query_vector_embedding=user_query_vector_embedding,
-            user_query_proper_nouns=user_query_nouns,
-            document_limit=self.document_limit
+        vs3_result: VS3Result = userport.db.vector_search_slack_sections(
+            team_id=request.team_id,
+            user_query_vector_embedding=query_vector_embedding,
+            user_query_proper_nouns=query_nouns,
+            document_limit=request.document_limit
         )
-        if len(relevant_sections) == 0:
-            # No relevant sections found, give user option to create new documentation.
-            result_blocks: List[MessageBlock] = []
-            answer_block: RichTextBlock = self.markdown_converter.convert(
-                self.no_sections_found_text)
-            result_blocks.append(answer_block)
+        request.vs3_result = vs3_result
 
-            buttons_block = Actionsblock(
-                elements=[
-                    ButtonElement(
-                        text=TextObject(
-                            type=TextObject.TYPE_PLAIN_TEXT, text=self.CREATE_DOC_TEXT
-                        ),
-                        action_id=self.CREATE_DOC_ACTION_ID,
-                        value=self.CREATE_DOC_VALUE,
-                    )
-                ]
+        logging.info(
+            f"Vector search results: {[record.heading for record in vs3_result.records]}")
+
+        # Use chord to compute multiple LLM results in parallel.
+        llm_results_header = []
+        for record in vs3_result.records:
+            llm_results_header.append(SlackInference.compute_llm_result_async.s(
+                user_query=request.user_query,
+                reference_text=SlackInference._get_combined_markdown_text(
+                    heading=record.heading, text=record.text),
+            ))
+        callback = SlackInference.process_llm_results.s(
+            request_json=request.model_dump_json())
+
+        # Invoke chord.
+        return chord(llm_results_header)(callback)
+
+    @shared_task
+    def process_llm_results(llm_results_json: List[str], request_json: str):
+        """
+        Process all LLM results and posts answer to Slack.
+
+        This is the final celery task to execute inference.
+        """
+        llm_results: List[LLMResult] = []
+        for section_result_json in llm_results_json:
+            llm_results.append(
+                LLMResult(**json.loads(section_result_json)))
+        request = SlackInferenceRequest(**json.loads(request_json))
+        vs3_records = request.vs3_result.records
+
+        if len(vs3_records) == 0:
+            # No sections found in vector search.
+            SlackInference._post_answer_to_slack(
+                answer_blocks=SlackInference._no_records_found(),
+                request=request
             )
-            result_blocks.append(buttons_block)
-            return result_blocks
+            return
 
-        # Generate answer from LLM.
-        # TODO: We may want to use section summary for Q&A. Section text is good for steps or direct references
-        # which may not be stored in summary. If we can combine both in the future, that would reduce false negatives
-        # further.
-        relevant_text_list: List[str] = [
-            self._get_combined_markdown_text(heading=section.heading, text=section.text) for section in relevant_sections]
-
-        answer_result: AnswerFromSectionsResult = self.text_analyzer.generate_answer_to_user_query(
-            user_query=user_query, relevant_text_list=relevant_text_list, markdown=True)
-
-        return self._create_answer_block(answer_result=answer_result, relevant_sections=relevant_sections)
-
-    def _create_answer_block(self, answer_result: AnswerFromSectionsResult, relevant_sections: List[SlackSection]) -> List[MessageBlock]:
-        """
-        Creates answer block from given Answer result and relevant sections.
-        """
-        assert len(
-            relevant_sections) > 0, f"Expected at least one relevant section, got no sections"
-        if not answer_result.information_found:
-            return self._create_answer_not_found_block(top_section=relevant_sections[0])
+        # Compute indices of VS3 records that have answers according to the LLM.
+        # The assumption is that LLM results are in the same order as VS3 records.
+        # We will use these indices to reference the VS3 records as source of truth
+        # in the final answer.
+        record_indices_with_answers: List[int] = []
+        for i, llm_result in enumerate(llm_results):
+            if llm_result.information_found:
+                record_indices_with_answers.append(i)
+        if len(record_indices_with_answers) == 0:
+            # None of the VS3 records contained the answer, indicate this in the
+            # answer and link the first record as evidence.
+            # TODO: Wonder if it is worth searching for next page of VS3 records for the answer.
+            SlackInference._post_answer_to_slack(
+                answer_blocks=SlackInference._create_answer_not_found_in_record(
+                    vs3_records[0]),
+                request=request
+            )
+            return
 
         logging.info(
-            f"\nChosen answer section index:  {answer_result.chosen_section_index}")
+            f'Found answers in VS3 indices: {record_indices_with_answers}')
+
+        # For now select first index where answer is found.
+        # TODO: Make this more sophisticated in the future where we can combine
+        # answers from multiple sections if need be.
+        selected_idx: LLMResult = record_indices_with_answers[0]
+        llm_result = llm_results[selected_idx]
+        reference_record = vs3_records[selected_idx]
+        SlackInference._post_answer_to_slack(
+            answer_blocks=SlackInference._create_answer_found(
+                llm_result=llm_result,
+                reference_record=reference_record,
+            ),
+            request=request
+        )
+
+    @shared_task
+    def _gen_query_nouns_async(user_query: str) -> List[str]:
+        """
+        Async version of generating nouns from given user query.
+
+        Run in a celery task to make the operation async.
+        """
+        text_analyzer = TextAnalyzer(inference=True)
+        return text_analyzer.generate_all_nouns(text=user_query)
+
+    @shared_task
+    def _gen_query_embedding_async(user_query: str) -> List[float]:
+        """
+        Async version of generating embedding of given user query.
+
+        Run in a celery task to make the operation async.
+        """
+        text_analyzer = TextAnalyzer(inference=True)
+        return text_analyzer.generate_vector_embedding(text=user_query)
+
+    @shared_task
+    def compute_llm_result_async(user_query: str, reference_text: str) -> str:
+        """
+        Computes whether reference text contains answer to user query.
+        We return a JSON string of LLMResult because it needds to be serialized
+        in worker processes.
+
+        Run in a celery task to make the operation aync.
+        """
+        text_analyzer = TextAnalyzer(inference=True)
+        llm_result: LLMResult = text_analyzer.answer_user_query(
+            user_query=user_query, reference_text=reference_text)
+        return llm_result.model_dump_json()
+
+    @staticmethod
+    def _no_records_found() -> List[MessageBlock]:
+        """
+        Returns list of answer blocks explaining no VS3 records were retrieved for user query.
+        """
+        result_blocks: List[MessageBlock] = []
+        markdown_converter = MarkdownToRichTextConverter()
+
+        answer_block: RichTextBlock = markdown_converter.convert(
+            SlackInference.NO_SECTIONS_FOUND_TEXT)
+        result_blocks.append(answer_block)
+
+        # No relevant sections found, give user option to create new documentation to fill gap.
+        buttons_block = Actionsblock(
+            elements=[
+                ButtonElement(
+                    text=TextObject(
+                        type=TextObject.TYPE_PLAIN_TEXT, text=SlackInference.CREATE_DOC_TEXT
+                    ),
+                    action_id=SlackInference.CREATE_DOC_ACTION_ID,
+                    value=SlackInference.CREATE_DOC_VALUE,
+                )
+            ]
+        )
+        result_blocks.append(buttons_block)
+        return result_blocks
+
+    @staticmethod
+    def _create_answer_not_found_in_record(top_record: VS3Record) -> List[MessageBlock]:
+        """
+        Returns answer blocks that explains answer was not found in given top record.
+        """
+        result_blocks: List[MessageBlock] = []
+
+        answer_block = RichTextBlock(elements=[])
+        # Add documentation URL.
+        doc_url = userport.utils.create_documentation_url(
+            host_name=get_hostname_url(),
+            team_domain=top_record.team_domain,
+            page_html_id=top_record.page_html_section_id,
+            section_html_id=top_record.html_section_id,
+        )
+        no_answer_section = RichTextSectionElement(elements=[
+            RichTextObject(type=RichTextObject.TYPE_TEXT,
+                           text="I'm sorry, I didn't find an answer to that question in "),
+            RichTextObject(type=RichTextObject.TYPE_LINK,
+                           text=f'#{top_record.html_section_id}.', url=doc_url),
+            RichTextObject(type=RichTextObject.TYPE_TEXT,
+                           text='\n\n')
+        ])
+        answer_block.elements.append(no_answer_section)
+        result_blocks.append(answer_block)
+
+        # Add buttons to add or modify documentation.
+        buttons_block = Actionsblock(elements=[
+            ButtonElement(
+                text=TextObject(
+                    type=TextObject.TYPE_PLAIN_TEXT, text=SlackInference.CREATE_DOC_TEXT
+                ),
+                action_id=SlackInference.CREATE_DOC_ACTION_ID,
+                value=SlackInference.CREATE_DOC_VALUE,
+            ),
+            ButtonElement(
+                text=TextObject(
+                    type=TextObject.TYPE_PLAIN_TEXT, text=SlackInference.EDIT_DOC_TEXT
+                ),
+                action_id=SlackInference.EDIT_DOC_ACTION_ID,
+                value=SlackInference.EDIT_DOC_VALUE,
+            ),
+
+        ])
+        result_blocks.append(buttons_block)
+        return result_blocks
+
+    @staticmethod
+    def _create_answer_found(llm_result: LLMResult, reference_record: VS3Record) -> List[MessageBlock]:
+        """
+        Return answer blocks given LLM result based on reference VS3 record as knowledge base.
+        """
         logging.info(
-            f"\nGenerated answer text: {answer_result.answer_text}")
+            f"\nGenerated answer text: {llm_result.answer}")
 
         result_blocks: List[MessageBlock] = []
 
         # Create answer block from markdown text.
-        answer_block: RichTextBlock = self.markdown_converter.convert(
-            markdown_text=answer_result.answer_text)
+        markdown_converter = MarkdownToRichTextConverter()
+        answer_block: RichTextBlock = markdown_converter.convert(
+            markdown_text=llm_result.answer)
 
         # Add source section to answer block so user knows where the answer was generated from.
-        source_section: SlackSection = relevant_sections[answer_result.chosen_section_index]
         source_section_url: str = userport.utils.create_documentation_url(
-            host_name=self.hostname_url,
-            team_domain=source_section.team_domain,
-            page_html_id=source_section.page_html_section_id,
-            section_html_id=source_section.html_section_id
+            host_name=get_hostname_url(),
+            team_domain=reference_record.team_domain,
+            page_html_id=reference_record.page_html_section_id,
+            section_html_id=reference_record.html_section_id
         )
-        source_section_url_text: str = f'#{source_section.html_section_id}'
+        source_section_url_text: str = f'#{reference_record.html_section_id}'
         answer_source_section = RichTextSectionElement(elements=[
             RichTextObject(type=RichTextObject.TYPE_TEXT,
                            text="\nSource : "),
@@ -163,72 +337,50 @@ class SlackInference:
         buttons_block = Actionsblock(elements=[
             ButtonElement(
                 text=TextObject(
-                    type=TextObject.TYPE_PLAIN_TEXT, text=self.LIKE_EMOJI, emoji=True
+                    type=TextObject.TYPE_PLAIN_TEXT, text=SlackInference.LIKE_EMOJI, emoji=True
                 ),
-                action_id=self.LIKE_ACTION_ID,
-                value=self.LIKE_VALUE
+                action_id=SlackInference.LIKE_ACTION_ID,
+                value=SlackInference.LIKE_VALUE
             ),
             ButtonElement(
                 text=TextObject(
-                    type=TextObject.TYPE_PLAIN_TEXT, text=self.DISLIKE_EMOJI, emoji=True
+                    type=TextObject.TYPE_PLAIN_TEXT, text=SlackInference.DISLIKE_EMOJI, emoji=True
                 ),
-                action_id=self.DISLIKE_ACTION_ID,
-                value=self.DISLIKE_VALUE
+                action_id=SlackInference.DISLIKE_ACTION_ID,
+                value=SlackInference.DISLIKE_VALUE
             ),
 
         ])
         result_blocks.append(buttons_block)
-
         return result_blocks
 
-    def _create_answer_not_found_block(self, top_section: SlackSection) -> List[MessageBlock]:
+    @staticmethod
+    def _post_answer_to_slack(answer_blocks: List[MessageBlock], request: SlackInferenceRequest):
         """
-        Creates block that explains answer was not found in given sections.
+        Helper to post answer blocks to Slack.
         """
-        result_blocks: List[MessageBlock] = []
+        answer_dicts = [block.model_dump(
+            exclude_none=True) for block in answer_blocks]
 
-        answer_block = RichTextBlock(elements=[])
-        # Add documentation URL.
-        doc_url = userport.utils.create_documentation_url(
-            host_name=self.hostname_url,
-            team_domain=top_section.team_domain,
-            page_html_id=top_section.page_html_section_id,
-            section_html_id=top_section.html_section_id
-        )
-        no_answer_section = RichTextSectionElement(elements=[
-            RichTextObject(type=RichTextObject.TYPE_TEXT,
-                           text="I'm sorry, I didn't find an answer to that question in "),
-            RichTextObject(type=RichTextObject.TYPE_LINK,
-                           text=f'#{top_section.html_section_id}.', url=doc_url),
-            RichTextObject(type=RichTextObject.TYPE_TEXT,
-                           text='\n\n')
-        ])
-        answer_block.elements.append(no_answer_section)
-        result_blocks.append(answer_block)
+        web_client = get_slack_web_client()
+        if request.private_visibility:
+            # Post ephemeral message.
+            web_client.chat_postEphemeral(
+                channel=request.channel_id,
+                user=request.user_id,
+                blocks=answer_dicts,
+            )
+        else:
+            # Post public message.
+            # User user_id as channel argument for IMs per: https://api.slack.com/methods/chat.postMessage#app_home
+            # TODO: Change this once we can post public messages in channels as well (in addtion to just IMs). Be careful
+            # to not respond to bot posted messages and enter into a recursive loop like we observed in DMs.
+            web_client.chat_postMessage(
+                channel=request.user_id,
+                blocks=answer_dicts
+            )
 
-        # Add buttons to add or modify documentation.
-        buttons_block = Actionsblock(elements=[
-            ButtonElement(
-                text=TextObject(
-                    type=TextObject.TYPE_PLAIN_TEXT, text=self.CREATE_DOC_TEXT
-                ),
-                action_id=self.CREATE_DOC_ACTION_ID,
-                value=self.CREATE_DOC_VALUE,
-            ),
-            ButtonElement(
-                text=TextObject(
-                    type=TextObject.TYPE_PLAIN_TEXT, text=self.EDIT_DOC_TEXT
-                ),
-                action_id=self.EDIT_DOC_ACTION_ID,
-                value=self.EDIT_DOC_VALUE,
-            ),
-
-        ])
-        result_blocks.append(buttons_block)
-
-        return result_blocks
-
-    def _get_combined_markdown_text(self, heading: str, text: str) -> str:
+    def _get_combined_markdown_text(heading: str, text: str) -> str:
         """
         Returns markdown formatted text combining heading and text within a section.
         """

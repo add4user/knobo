@@ -5,14 +5,13 @@ import json
 import logging
 from enum import Enum
 from typing import Dict, ClassVar, Optional, List
-from slack_sdk import WebClient
 from slack_sdk.web.slack_response import SlackResponse
 from dotenv import load_dotenv
-from flask import Blueprint, request, jsonify, g
+from flask import Blueprint, request, jsonify
 from userport.exceptions import APIException
 from pydantic import BaseModel, validator
 from userport.slack_page_indexer import SlackPageIndexer
-from userport.slack_inference import SlackInference
+from userport.slack_inference import SlackInference, SlackInferenceRequest
 from userport.slack_blocks import MessageBlock, RichTextBlock
 from userport.slack_modal_views import (
     ViewCreatedResponse,
@@ -45,24 +44,13 @@ from userport.slack_models import (
     FindAndUpateSlackSectionRequest,
 )
 import userport.utils
+from userport.utils import get_slack_web_client, get_hostname_url
 import userport.db
-from celery import shared_task
+from celery import shared_task, chord
 
 bp = Blueprint('slack_app', __name__)
 
 load_dotenv()  # take environment variables from .env.
-
-# TODO: Change to custom domain in production.
-HARDCODED_HOSTNAME = 'https://fb5e-2409-40f2-1041-7619-857c-13e-96b0-e84d.ngrok-free.app'
-
-
-def get_slack_web_client() -> WebClient:
-    if 'slack_web_client' not in g:
-        # Create a new client and connect to the server
-        g.slack_web_client = WebClient(
-            token=os.environ['SLACK_OAUTH_BOT_TOKEN'])
-
-    return g.slack_web_client
 
 
 def get_json_data_from_request():
@@ -514,30 +502,8 @@ def render_documentation_page(team_domain: str, subpath: str):
 
 @shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})
 def answer_user_query_in_background(user_query: str, team_id: str, channel_id: str, user_id: str, private_visibility: bool):
-    slack_inference = SlackInference(hostname_url=HARDCODED_HOSTNAME)
-    answer_blocks: List[MessageBlock] = slack_inference.answer(
-        user_query=user_query, team_id=team_id)
-    answer_dicts = [block.model_dump(exclude_none=True)
-                    for block in answer_blocks]
-
-    # Post answer to user as a chat message.
-    web_client = get_slack_web_client()
-    if private_visibility:
-        # Post ephemeral message.
-        web_client.chat_postEphemeral(
-            channel=channel_id,
-            user=user_id,
-            blocks=answer_dicts,
-        )
-    else:
-        # Post public message.
-        # User user_id as channel argument for IMs per: https://api.slack.com/methods/chat.postMessage#app_home
-        # TODO: Change this once we can post public messages in channels as well (in addtion to just IMs). Be careful
-        # to not respond to bot posted messages and enter into a recursive loop like we observed in DMs.
-        web_client.chat_postMessage(
-            channel=user_id,
-            blocks=answer_dicts
-        )
+    SlackInference.answer(SlackInferenceRequest(user_query=user_query, team_id=team_id,
+                          channel_id=channel_id, user_id=user_id, private_visibility=private_visibility))
 
 
 def _create_doc_common_in_background(common_payload: CommonContextPayload, initial_rich_text_block: RichTextBlock = None):
@@ -882,7 +848,7 @@ def create_new_page_in_background(view_id: str, new_page_title: str):
 
     # Complete upload in background.
     uploaded_url = userport.utils.create_documentation_url(
-        host_name=HARDCODED_HOSTNAME,
+        host_name=get_hostname_url(),
         team_domain=team_domain,
         page_html_id=page_html_section_id,
         section_html_id=child_html_section_id
@@ -955,7 +921,7 @@ def create_section_inside_page_in_background(placed_doc_submission_json):
 
     # Complete upload in background.
     uploaded_url = userport.utils.create_documentation_url(
-        host_name=HARDCODED_HOSTNAME,
+        host_name=get_hostname_url(),
         team_domain=team_domain,
         page_html_id=page_section.html_section_id,
         section_html_id=child_html_section_id

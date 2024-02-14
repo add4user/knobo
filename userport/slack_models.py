@@ -229,9 +229,9 @@ class FindAndUpateSlackSectionRequest(BaseModel):
     update_request: UpdateSlackSectionRequest
 
 
-class VectorSearchSlackSectionResult(BaseModel):
+class VS3Record(BaseModel):
     """
-    Result of vector search over SlackSections. All attributes except 
+    A single record resulting from vector search over SlackSections. All attributes except 
     'score' are attributes common to SlackSection.
     """
     # ID of the section. To get other fields of the section, we can just
@@ -251,6 +251,14 @@ class VectorSearchSlackSectionResult(BaseModel):
     html_section_id: str = Field(...)
     # Document score associated with search query (stored in parent model).
     score: float = Field(...)
+
+
+class VS3Result(BaseModel):
+    """
+    List of vector search result records. This instance
+    can be serialized to JSON easily.
+    """
+    records: List[VS3Record]
 
 
 class BaseUpdateRequest(BaseModel):
