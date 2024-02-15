@@ -213,7 +213,7 @@ class CustomHTMLParser(HTMLParser):
                 continue
             if not values:
                 continue
-            if footer_keyword in set(values.split()):
+            if footer_keyword in set(values):
                 return True
 
         return False

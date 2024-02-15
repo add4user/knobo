@@ -14,6 +14,8 @@ class SlackHTMLGenerator:
     element generation which will be autoescaped to a string by Jinja2. 
 
     We will instead generate HTML by string formatting manually.
+
+    This is used by Flask endpoint to render documentation in HTML pages.
     """
 
     def __init__(self) -> None:
