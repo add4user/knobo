@@ -13,6 +13,9 @@ import logging
 
 class SlackPageIndexer:
     """
+    Even though async indexer exists, we will keep this until we know the
+    async class works accurately. The core logic is the same for the two flows.
+
     Class to index page and associated sections and update them in the database.
     Assumes that Sections already exist associated with given page.
 

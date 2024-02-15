@@ -207,14 +207,14 @@ def _to_slack_find_request_dict(find_request: BaseFindRequest) -> Dict:
     """
     Returns dictionary of find request for given SlackUpload.
     """
-    return find_request.model_dump(by_alias=True, exclude_unset=True)
+    return find_request.model_dump(by_alias=True, exclude_unset=True, exclude_none=True)
 
 
 def _to_slack_update_request_dict(update_sub_request: BaseUpdateSubRequest) -> Dict:
     """
     Returns dictionary of update request using given slack upload update request.
     """
-    return BaseUpdateRequest(update_sub_request=update_sub_request).model_dump(by_alias=True, exclude_unset=True)
+    return BaseUpdateRequest(update_sub_request=update_sub_request).model_dump(by_alias=True, exclude_unset=True, exclude_none=True)
 
 
 def create_user_and_organization_transactionally(user_model: UserModel, organization_model: OrganizationModel):
@@ -639,6 +639,13 @@ def update_slack_sections(find_and_update_requests: List[FindAndUpateSlackSectio
                 # Update last updated time.
                 request.update_request.last_updated_time = current_time
 
+                import logging
+                logging.info(
+                    f'got find request: {_to_slack_find_request_dict(request.find_request)}')
+                update_keys = _to_slack_update_request_dict(
+                    request.update_request)['$set'].keys()
+                logging.info(
+                    f'got update request: { update_keys}')
                 if not sections.find_one_and_update(
                     _to_slack_find_request_dict(request.find_request),
                     _to_slack_update_request_dict(request.update_request)

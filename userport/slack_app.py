@@ -11,6 +11,7 @@ from flask import Blueprint, request, jsonify
 from userport.exceptions import APIException
 from pydantic import BaseModel, validator
 from userport.slack_page_indexer import SlackPageIndexer
+from userport.slack_page_indexer_async import SlackPageIndexerAsync
 from userport.slack_inference import SlackInference, SlackInferenceRequest
 from userport.slack_blocks import MessageBlock, RichTextBlock
 from userport.slack_modal_views import (
@@ -654,18 +655,9 @@ def update_edited_section_in_background(edit_doc_block_action_json: str, user_id
         find_request=find_request, update_request=update_request)
     userport.db.update_slack_sections([find_and_update_request])
 
-    # Notify user via ephemeral message to user's DM with Knobo.
-    web_client = get_slack_web_client()
-    web_client.chat_postEphemeral(channel=user_id, user=user_id,
-                                  text="Section Edit in progress! I will ping you once it's done!")
-
     # Re-index the page.
-    indexer = SlackPageIndexer()
-    indexer.run_from_section(section_id=section_id)
-
-    # Notify user that edit indexing is complete.
-    web_client.chat_postEphemeral(channel=user_id, user=user_id,
-                                  text=f"Edit complete for section: #{section.html_section_id}!")
+    SlackPageIndexerAsync.run_from_section_async(
+        section_id=section_id, user_id=user_id, creation=False)
 
 
 @shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})
@@ -947,26 +939,15 @@ def complete_new_section_upload_in_background(upload_id: str, section_id: str, u
             f"Upload complete failed for Upload ID: {upload_id} with error: {e}")
         return
 
-    web_client = get_slack_web_client()
-
     if slack_upload.status != SlackUploadStatus.IN_PROGRESS:
-        # Post ephemeral message to user's DM with Knobo.
-        web_client.chat_postEphemeral(channel=slack_upload.creator_id, user=slack_upload.creator_id,
-                                      text="Section creation is in progress! I will ping you once it's done!")
-
         userport.db.update_slack_upload_status(
             upload_id=upload_id, upload_status=SlackUploadStatus.IN_PROGRESS)
         logging.info("Updated Upload Status to in progress successfully")
 
     if slack_upload.status != SlackUploadStatus.COMPLETED:
-        # Index the page and associated section.
-        indexer = SlackPageIndexer()
-        indexer.run_from_section(section_id=section_id)
+        SlackPageIndexerAsync.run_from_section_async(
+            section_id=section_id, user_id=slack_upload.creator_id, creation=True)
 
+        # TODO: This should be after run_from_section is completed given that method is async.
         userport.db.update_slack_upload_status(
             upload_id=upload_id, upload_status=SlackUploadStatus.COMPLETED)
-        logging.info("Updated Upload Status to in Completed successfully")
-
-    # Post ephemeral message to user's DM with Knobo.
-    web_client.chat_postEphemeral(channel=slack_upload.creator_id, user=slack_upload.creator_id,
-                                  text=f"Section creation complete! Available at {uploaded_url}")
