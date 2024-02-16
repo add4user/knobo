@@ -49,7 +49,9 @@ class RichTextObject(BaseModel):
     TYPE_LINK: ClassVar[str] = 'link'
 
     type: str
-    text: str
+    # Text field is not always required. For example, when only an image link
+    # is uploaded it only has type and url fields set.
+    text: Optional[str] = None
     style: Optional[RichTextStyle] = None
     url: Optional[str] = None
 
@@ -61,12 +63,15 @@ class RichTextObject(BaseModel):
         return v
 
     @root_validator(pre=True)
-    def check_url_set_condition(cls, values):
+    def check_valid_states(cls, values):
         type_val = values.get('type')
         url_val = values.get('url')
+        text_val = values.get('text')
         if type_val == RichTextObject.TYPE_LINK and url_val is None:
             raise ValueError(
                 f'"url" attribute is not set even thought type is {RichTextObject.TYPE_LINK}')
+        if type_val == RichTextObject.TYPE_TEXT and text_val is None:
+            raise ValueError(f'"text" attribute cannot be None when type is: {RichTextObject.TYPE_TEXT}')
         return values
 
     def is_plain_text(self) -> bool:
