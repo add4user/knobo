@@ -360,6 +360,7 @@ class MarkdownToRichTextConverter:
         for match in strikethrough_matches:
             styled_index_intervals.append([match.start(), match.end()])
 
+        # TODO: Match image links which is ![text](url) as well.
         link_matches = re.finditer(
             pattern=r'\[([^\]]+)\]\(([^)]+)\)', string=text)
         for match in link_matches:

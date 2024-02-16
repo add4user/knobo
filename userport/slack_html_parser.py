@@ -3,6 +3,7 @@ from typing import List, Optional, Dict
 from pydantic import BaseModel
 import userport.utils
 from urllib.parse import urljoin
+import re
 
 
 class SlackHTMLSection(BaseModel):
@@ -115,7 +116,10 @@ class SlackHTMLParser:
     CODE_TAG = 'code'
     LINK_TAG = 'a'
     BREAK_TAG = 'br'
+    IMG_TAG = 'img'
     HREF_ATTR = 'href'
+    SRC_ATTR = 'src'
+    ALT_ATTR = 'alt'
 
     LIST_INDENT_DELTA = 4
 
@@ -346,8 +350,15 @@ class SlackHTMLParser:
             self.cur_format.url = ""
             return
 
+        if self._is_image_tag(tag):
+            # Image has no children, just format alt to markdown.
+            image_text: str = self._get_image_link_markdown(tag)
+            # Add a newline as prefix.
+            self.current_section.text += f'\n{image_text}'
+            return
+
         if self._is_break_tag(tag):
-            # Just append a new line.
+            # # Image has no children., just append a new line.
             self.current_section.text += "\n"
             return
 
@@ -399,7 +410,8 @@ class SlackHTMLParser:
         return parent_section
 
     def _is_heading_tag(self, tag: Tag) -> bool:
-        return tag.name.startswith('h')
+        pattern = r'h[1-6]'
+        return re.match(pattern=pattern, string=tag.name) is not None
 
     def _is_paragraph_tag(self, tag: Tag) -> bool:
         return tag.name == self.P_TAG
@@ -436,6 +448,17 @@ class SlackHTMLParser:
 
     def _is_break_tag(self, tag: Tag) -> bool:
         return tag.name == self.BREAK_TAG
+
+    def _is_image_tag(self, tag: Tag) -> bool:
+        return tag.name == self.IMG_TAG
+
+    def _get_image_link_markdown(self, img_tag: Tag) -> bool:
+        assert self._is_image_tag(
+            img_tag), f"Expected image tag, got {img_tag}"
+        assert self.SRC_ATTR in img_tag.attrs, f"'src' attribute not present in img tag: {img_tag}"
+        alt_text: str = img_tag[self.ALT_ATTR] if self.ALT_ATTR in img_tag.attrs else 'image'
+        url: str = img_tag[self.SRC_ATTR]
+        return f'![{alt_text}]({url})'
 
     def _get_heading_level(self, htag: Tag) -> int:
         """
@@ -502,17 +525,20 @@ if __name__ == "__main__":
     # url = 'https://flask.palletsprojects.com/en/2.3.x/patterns/celery/'
     # url = 'https://flask.palletsprojects.com/en/2.3.x/installation/#install-flask'
     # url = 'https://flask.palletsprojects.com/en/2.3.x/tutorial/factory/'
-    url = 'https://slack.com/intl/en-gb/help/articles/360017938993-What-is-a-channel'
+    # url = 'https://slack.com/intl/en-gb/help/articles/360017938993-What-is-a-channel'
+    url = 'https://slack.com/intl/en-gb/help/articles/213185467-Convert-a-channel-to-private-or-public'
+    # url = 'https://slack.com/intl/en-gb/help/articles/203950418-Use-a-canvas-in-Slack'
     html_page = userport.utils.fetch_html_page(url)
 
     parser = SlackHTMLParser()
+    content_start_class_for_slack = 'content_col'
     parser.parse(html_page=html_page, page_url=url,
-                 content_start_class='content_col')
+                 content_start_class=content_start_class_for_slack)
 
     root_section = parser.get_root_section()
     # print(root_section.child_ids)
     section_map = parser.get_section_map()
-    child_section = section_map[root_section.child_ids[2]]
+    child_section = section_map[root_section.child_ids[1]]
     # grandchild_section = section_map[child_section.child_ids[0]]
     section = child_section
     print(f'{section.heading}\n{section.text}')
