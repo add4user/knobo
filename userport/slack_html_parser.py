@@ -64,7 +64,9 @@ class TextFormatting(BaseModel):
         Apply current formatting to given text.
         The return string is Markdown formatted.
         """
-        if self.preformatted:
+        if self.preformatted or self.heading:
+            # skip formatting if preformatted or
+            # part of heading block.
             return text
 
         # We want to replace '\n' within HTML with empty string
@@ -123,17 +125,18 @@ class SlackHTMLParser:
 
     LIST_INDENT_DELTA = 4
 
-    def parse(self, html_page: str, page_url: str, content_start_class: str = None):
+    def parse(self, html_page: str, page_url: str, content_start_class: str = None, content_end_class=None):
         self.soup = BeautifulSoup(html_page, 'html.parser')
         self.page_url: str = page_url
         self.starting_htag: str = self._starting_heading_tag()
         self.start_parsing: bool = False
         self.end_parsing: bool = False
-        self.next_id: int = 0
+        self.next_id: int = 1
         self.root_section: SlackHTMLSection = None
         self.current_section: SlackHTMLSection = None
         self.cur_format = TextFormatting(page_url=self.page_url)
         self.all_sections_dict: Dict[int, SlackHTMLSection] = {}
+        self.content_end_class = content_end_class
 
         # If content start class is provided, we find tag associated with
         # it and use it as starting point for parsing the content.
@@ -341,6 +344,11 @@ class SlackHTMLParser:
             return
 
         if self._is_link_tag(tag):
+            # If we are in heading block,
+            # skip parsing text inside link tag.
+            if self.cur_format.heading:
+                return
+
             self.cur_format.link = True
             self.cur_format.url = tag[self.HREF_ATTR]
 
@@ -504,6 +512,7 @@ class SlackHTMLParser:
         """
         if isinstance(tag, NavigableString):
             return False
+
         footer_keyword = 'footer'
         script_keyword = 'script'
         if tag == footer_keyword or tag == script_keyword:
@@ -515,6 +524,8 @@ class SlackHTMLParser:
             values = tag[attr]
             if not values:
                 continue
+            if self.content_end_class and self.content_end_class in values:
+                return True
             if footer_keyword in set(values):
                 return True
 
@@ -526,19 +537,34 @@ if __name__ == "__main__":
     # url = 'https://flask.palletsprojects.com/en/2.3.x/installation/#install-flask'
     # url = 'https://flask.palletsprojects.com/en/2.3.x/tutorial/factory/'
     # url = 'https://slack.com/intl/en-gb/help/articles/360017938993-What-is-a-channel'
-    url = 'https://slack.com/intl/en-gb/help/articles/213185467-Convert-a-channel-to-private-or-public'
+    # url = 'https://slack.com/intl/en-gb/help/articles/213185467-Convert-a-channel-to-private-or-public'
     # url = 'https://slack.com/intl/en-gb/help/articles/203950418-Use-a-canvas-in-Slack'
+    # url = 'https://flask.palletsprojects.com/en/2.3.x/installation/#python-version'
+    url = 'https://flask.palletsprojects.com/en/2.3.x/tutorial/factory/'
     html_page = userport.utils.fetch_html_page(url)
 
     parser = SlackHTMLParser()
     content_start_class_for_slack = 'content_col'
+    content_end_class_for_flask = 'clearer'
     parser.parse(html_page=html_page, page_url=url,
-                 content_start_class=content_start_class_for_slack)
+                 content_start_class=None, content_end_class=content_end_class_for_flask)
 
     root_section = parser.get_root_section()
-    # print(root_section.child_ids)
     section_map = parser.get_section_map()
-    child_section = section_map[root_section.child_ids[1]]
+
+    def display_section(sec_id: int, section_map: Dict[int, SlackHTMLSection], indent: str = ""):
+        section = section_map[sec_id]
+        print(
+            f"{indent}level: h{section.heading_level}, ID: {sec_id}, heading: {section.heading}, child_ids: {section.child_ids}, parent_id: {section.parent_id}")
+
+        for child_id in section.child_ids:
+            display_section(child_id, section_map, indent=indent + "  ")
+
+    display_section(root_section.id, section_map)
+
+    print("\n")
+    child_section = section_map[root_section.child_ids[0]]
     # grandchild_section = section_map[child_section.child_ids[0]]
     section = child_section
-    print(f'{section.heading}\n{section.text}')
+    # print(f'{section.heading}\n{section.text}')
+    print(repr(section.text))

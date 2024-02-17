@@ -507,6 +507,7 @@ class GlobalShortcutPayload(CommonShortcutPayload):
     """
     EDIT_DOC_CALLBACK_ID: ClassVar[str] = 'edit_doc_global'
     CREATE_DOC_CALLBACK_ID: ClassVar[str] = 'create_doc_global'
+    IMPORT_DOC_CALLBACK_ID: ClassVar[str] = 'import_doc_global'
 
 
 class PlainTextObject(TextObject):
@@ -720,6 +721,36 @@ class CommonFactoryMethods:
         return SelectOptionObject(
             text=TextObject(type=TextObject.TYPE_PLAIN_TEXT, text=text),
             value=id,
+        )
+
+    @staticmethod
+    def create_plain_text_input_block(block_id: str, label: str, action_id: str, initial_value: str = "") -> InputBlock:
+        """
+        Create Plain text input block using given inputs.
+        """
+        return InputBlock(
+            block_id=block_id,
+            label=PlainTextObject(
+                text=label),
+            element=PlainTextInputElement(
+                action_id=action_id, initial_value=initial_value)
+        )
+
+    @staticmethod
+    def create_rich_text_block(block_id: str, text: str) -> RichTextBlock:
+        """
+        Helper to create rich text block.
+        """
+        return RichTextBlock(
+            block_id=block_id,
+            elements=[
+                RichTextSectionElement(
+                    elements=[
+                        RichTextObject(
+                            type=RichTextObject.TYPE_TEXT, text=text)
+                    ]
+                ),
+            ],
         )
 
 
@@ -949,13 +980,8 @@ class EditDocViewFactory:
         section: SlackSection = userport.db.get_slack_section(id=section_id)
 
         # Heading Input block.
-        heading_input_block = InputBlock(
-            block_id=self.SECTION_HEADING_BLOCK_ID,
-            label=PlainTextObject(
-                text=self.SECTION_HEADING_TEXT),
-            element=PlainTextInputElement(
-                action_id=self.SECTION_HEADING_ACTION_ID, initial_value=get_heading_content(section.heading))
-        )
+        heading_input_block = CommonFactoryMethods.create_plain_text_input_block(
+            block_id=self.SECTION_HEADING_BLOCK_ID, label=self.SECTION_HEADING_TEXT, action_id=self.SECTION_HEADING_ACTION_ID, initial_value=get_heading_content(section.heading))
         base_view.blocks.append(heading_input_block)
 
         # Body Input block which is rich text.
@@ -991,6 +1017,113 @@ class EditDocViewFactory:
             submit=PlainTextObject(text=self.SUBMIT_TEXT),
             close=PlainTextObject(text=self.CLOSE_TEXT),
         )
+
+
+class ImportDocViewFactory:
+    """
+    Factory class to help manage import documentation flow.
+    """
+    IMPORT_DOC = "Import Documentation"
+
+    URL_INFO_BLOCK_ID = "import_info_block_id"
+    URL_INFO_TEXT = "Please enter a valid URL pointing to existing documentation you would like to import to Knobo."
+
+    URL_BLOCK_ID = "import_url_block_id"
+    URL_LABEL_TEXT = "URL"
+    ACTION_ID = "import_url_action_id"
+
+    SUBMIT_TEXT = "Submit"
+    CLOSE_TEXT = "Cancel"
+
+    @staticmethod
+    def get_view_title() -> str:
+        """
+        Helper to fetch Title of Edit Documentation modal view.
+        """
+        return ImportDocViewFactory.IMPORT_DOC
+
+    def create_initial_view(self) -> BaseModalView:
+        """
+        Create initial view.
+        """
+        base_view = self._create_base_view()
+
+        # Provide info to user about Importing URL.
+        import_info_block = CommonFactoryMethods.create_rich_text_block(
+            block_id=self.URL_INFO_BLOCK_ID, text=self.URL_INFO_TEXT)
+        base_view.blocks.append(import_info_block)
+
+        input_block = CommonFactoryMethods.create_plain_text_input_block(
+            block_id=self.URL_BLOCK_ID, label=self.URL_LABEL_TEXT, action_id=self.ACTION_ID)
+        base_view.blocks.append(input_block)
+
+        return base_view
+
+    def _create_base_view(self) -> BaseModalView:
+        """
+        Returns Base Modal View to update created section from previous view.
+        This is used by other helper methods to add custom Blocks depending the state
+        of the view.
+
+        This view is like the base layout of the edit document view.
+        """
+        return BaseModalView(
+            title=PlainTextObject(text=self.get_view_title()),
+            blocks=[],
+            submit=PlainTextObject(text=self.SUBMIT_TEXT),
+            close=PlainTextObject(text=self.CLOSE_TEXT),
+        )
+
+
+class ImportDocSubmissionPayload(BaseModel):
+    """
+    Attributes in view submission payload when import doc request is submitted.
+    """
+    class View(BaseModel):
+        class State(BaseModel):
+            class Values(BaseModel):
+                class Block(BaseModel):
+                    class Action(BaseModel):
+                        value: str
+                    import_url_action_id: Action
+                import_url_block_id: Block
+            values: Values
+        state: State
+        id: str
+
+    view: View
+    user: SlackUser
+    team: SlackTeam
+
+    def get_url(self) -> str:
+        """
+        Returns URL input provided by the user.
+        """
+        return self.view.state.values.import_url_block_id.import_url_action_id.value
+
+    def get_user_id(self) -> str:
+        """
+        Return ID of the creator.
+        """
+        return self.user.id
+
+    def get_team_id(self) -> str:
+        """
+        Return team ID.
+        """
+        return self.team.id
+
+    def get_team_domain(self) -> str:
+        """
+        Return team domain.
+        """
+        return self.team.domain
+
+    def get_view_id(self) -> str:
+        """
+        Return view ID.
+        """
+        return self.view.id
 
 
 class PlaceDocSubmissionPayload(BaseModel):
@@ -1246,7 +1379,7 @@ class PlaceDocViewFactory:
         base_view.blocks.append(DividerBlock())
 
         # Provide info to user that they need to provide page title as well.
-        new_page_title_info = self._create_rich_text_block(
+        new_page_title_info = CommonFactoryMethods.create_rich_text_block(
             block_id=self.PROMPT_USER_ABOUT_NEW_PAGE_TITLE_BLOCK_ID, text=self.PROMPT_USER_ABOUT_NEW_PAGE_TITLE)
         base_view.blocks.append(new_page_title_info)
 
@@ -1296,7 +1429,7 @@ class PlaceDocViewFactory:
         base_view.blocks.append(ordered_section_block)
 
         # Prompt user to select parent Section under which to place the new section.
-        select_parent_section_info = self._create_rich_text_block(
+        select_parent_section_info = CommonFactoryMethods.create_rich_text_block(
             block_id=self.PROMPT_USER_TO_SELECT_PARENT_SECTION_BLOCK_ID, text=self.PROMPT_USER_TO_SELECT_PARENT_SECTION_TEXT)
         base_view.blocks.append(select_parent_section_info)
 
@@ -1353,7 +1486,7 @@ class PlaceDocViewFactory:
             return base_view
 
         # Prompt user to select position of section.
-        select_position_info = self._create_rich_text_block(
+        select_position_info = CommonFactoryMethods.create_rich_text_block(
             block_id=self.PROMPT_USER_TO_SELECT_POSITION_BLOCK_ID, text=self.PROMPT_USER_TO_SELECT_POSITION_TEXT)
         base_view.blocks.append(select_position_info)
 
@@ -1551,22 +1684,6 @@ class PlaceDocViewFactory:
             block_id=self.NEW_PAGE_TITLE_BLOCK_ID,
             element=PlainTextInputElement(
                 action_id=self.NEW_PAGE_TITLE_ACTION_ID)
-        )
-
-    def _create_rich_text_block(self, block_id: str, text: str) -> RichTextBlock:
-        """
-        Helper to create rich text block.
-        """
-        return RichTextBlock(
-            block_id=block_id,
-            elements=[
-                RichTextSectionElement(
-                    elements=[
-                        RichTextObject(
-                            type=RichTextObject.TYPE_TEXT, text=text)
-                    ]
-                ),
-            ],
         )
 
     def _create_base_view(self) -> BaseModalView:

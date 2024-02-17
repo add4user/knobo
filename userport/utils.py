@@ -115,15 +115,25 @@ def _get_heading_markdown_match(markdown_text: str) -> re.Match:
         f'Expected Markdown heading in text, got {repr(markdown_text)}')
 
 
-def convert_to_url_path_text(text: str) -> str:
+def to_urlsafe_path(text: str) -> str:
     """
     Converts input text into a string that can be used in URL path.
     We only keep alphanumeric characters (in lowercase form) and converts spaces to hypens.
+    We also want to stop parsing if we hit encounter an opening bracket (likely indicating a URL)
+    until we encounter the corresponding closing bracket.
     """
     new_text_list: List[str] = []
+    inside_open_bracket: bool = False
     for splitstr in text.split(" "):
         new_split_str_list: List[str] = []
         for c in splitstr:
+            if c == "(":
+                inside_open_bracket = True
+            elif c == ")":
+                inside_open_bracket = False
+            if inside_open_bracket:
+                # Stop parsing characters while inside brackets.
+                continue
             if c.isalnum():
                 new_split_str_list.append(c.lower())
         new_text_list.append("".join(new_split_str_list))

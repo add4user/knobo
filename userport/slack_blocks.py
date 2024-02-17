@@ -71,7 +71,8 @@ class RichTextObject(BaseModel):
             raise ValueError(
                 f'"url" attribute is not set even thought type is {RichTextObject.TYPE_LINK}')
         if type_val == RichTextObject.TYPE_TEXT and text_val is None:
-            raise ValueError(f'"text" attribute cannot be None when type is: {RichTextObject.TYPE_TEXT}')
+            raise ValueError(
+                f'"text" attribute cannot be None when type is: {RichTextObject.TYPE_TEXT}')
         return values
 
     def is_plain_text(self) -> bool:
@@ -404,7 +405,7 @@ class RichTextBlock(BaseModel):
             if isinstance(elem, RichTextSectionElement) or \
                 isinstance(elem, RichTextPreformattedElement) or \
                     isinstance(elem, RichTextQuoteElement):
-                if len(current_list_of_lists) > 0:
+                if len(current_list_of_lists) > 0 and not self._is_newline_only_text(elem):
                     # Compute HTML and reset the list.
                     html_values.append(
                         self._get_html_from_list_of_lists(current_list_of_lists))
@@ -423,6 +424,21 @@ class RichTextBlock(BaseModel):
                 self._get_html_from_list_of_lists(current_list_of_lists))
             current_list_of_lists = []
         return "".join(html_values)
+
+    def _is_newline_only_text(self, elem: Union[RichTextSectionElement, RichTextPreformattedElement, RichTextQuoteElement]) -> bool:
+        """
+        Checks if the text inside given element just consists of newline and
+        whitespace characters and returns the effect text if so.
+        Returns None otherwise.
+        """
+        if not isinstance(elem, RichTextSectionElement):
+            return False
+        rich_section_elem: RichTextSectionElement = elem
+        for rich_text_obj in rich_section_elem.elements:
+            if not rich_text_obj.text.isspace():
+                # Text without newline, return immediately.
+                return False
+        return True
 
     def _get_html_from_list_of_lists(self, list_of_lists: List[RichTextListElement]) -> str:
         """

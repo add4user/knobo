@@ -29,12 +29,15 @@ from userport.slack_models import (
     VS3Record,
     VS3Result
 )
+from userport.slack_html_parser import SlackHTMLSection
 from datetime import datetime, timezone
 from bson.objectid import ObjectId
 from typing import Optional, Dict, List, Type
 from userport.index.page_section_manager import PageSection
 from queue import Queue
 import copy
+import userport.utils
+import logging
 
 
 class NotFoundException(Exception):
@@ -475,6 +478,146 @@ def create_slack_page_and_section(page_section: SlackSection, child_section: Sla
             return page_id, child_id
 
 
+def create_slack_sections_from_html_section(root_section_int_id: int, sections_map: Dict[int, SlackHTMLSection],
+                                            upload_id: str, team_id: str, team_domain: str, creator_id: str, creator_email: str) -> str:
+    """
+    Create sections in database from given root section ID and section map.
+
+    All these sections will be created within a single page. The sections are created transactionally.
+
+    Returns ID of the page (first section).
+    """
+    current_time = _get_current_time()
+
+    client = _get_mongo_client()
+    with client.start_session() as session:
+        with session.start_transaction():
+            return _create_slack_section_dfs(
+                section_int_id=root_section_int_id,
+                sections_map=sections_map,
+                upload_id=upload_id,
+                team_id=team_id,
+                team_domain=team_domain,
+                creator_id=creator_id,
+                creator_email=creator_email,
+                parent_section_id="",
+                page_id="",
+                page_html_section_id="",
+                current_time=current_time
+            )
+
+
+def _create_slack_section_dfs(section_int_id: int, sections_map: Dict[int, SlackHTMLSection], upload_id: str,
+                              team_id: str, team_domain: str, creator_id: str, creator_email: str, parent_section_id: str,
+                              page_id: str, page_html_section_id: str, current_time: datetime) -> str:
+    """
+    Create given HTML Section and recurisely traverses children in a DFS manner. The recursion is executed within a transaction context.
+
+    Once the recursion completes, all sections in a page are created with the correct parent child linkages.
+    """
+    section = sections_map[section_int_id]
+
+    html_section_id: str = userport.utils.to_urlsafe_path(
+        userport.utils.get_heading_content(markdown_text=section.heading))
+    if not section.parent_id:
+        # Root Section so Page HTML ID is the same as HTML ID.
+        page_html_section_id = html_section_id
+
+    # Create section in db.
+    logging.info(
+        f"upload id: {upload_id}," +
+        f"team id: {team_id}," +
+        f"page_id: {page_id}, " +
+        f"team domain: {team_domain}," +
+        f"parent section id: {parent_section_id}," +
+        f"creator id: {creator_id}," +
+        f"creator email: {creator_email}," +
+        f"heading: {section.heading},"
+        f"html section id: {html_section_id},"
+        f"page html section id: {page_html_section_id},"
+        f"created time: {current_time}"
+    )
+    slack_section = SlackSection(
+        upload_id=upload_id,
+        team_id=team_id,
+        page_id=page_id,
+        team_domain=team_domain,
+        parent_section_id=parent_section_id,
+        creator_id=creator_id,
+        creator_email=creator_email,
+        updater_id=creator_id,
+        updater_email=creator_email,
+        heading=section.heading,
+        text=section.text,
+        html_section_id=html_section_id,
+        page_html_section_id=page_html_section_id,
+        created_time=current_time,
+        last_updated_time=current_time
+    )
+    slack_sections = _get_slack_sections()
+    section_id = str(slack_sections.insert_one(
+        slack_section.model_dump(exclude=_exclude_id())).inserted_id)
+
+    if not section.parent_id:
+        # Root section so page ID won't be set.
+        page_id = section_id
+
+    child_section_ids: List[str] = []
+    for child_int_id in section.child_ids:
+        child_section_id: str = _create_slack_section_dfs(
+            section_int_id=child_int_id,
+            sections_map=sections_map,
+            upload_id=upload_id,
+            team_id=team_id,
+            team_domain=team_domain,
+            creator_id=creator_id,
+            creator_email=creator_email,
+            parent_section_id=section_id,
+            page_id=page_id,
+            page_html_section_id=page_html_section_id,
+            current_time=current_time
+        )
+        child_section_ids.append(child_section_id)
+
+    if len(child_section_ids) > 0:
+        # Update child sections in parent.
+        update_sub_req = UpdateSlackSectionRequest(
+            child_section_ids=child_section_ids,
+        )
+        if not section.parent_id:
+            # Root section, so we need to updae new page ID as well.
+            update_sub_req.page_id = page_id
+
+        if not slack_sections.find_one_and_update(
+                _to_slack_find_request_dict(
+                    FindSlackSectionRequest(id=ObjectId(section_id))),
+                _to_slack_update_request_dict(update_sub_request=update_sub_req)):
+            raise NotFoundException(
+                f"Failed to find page Section for section ID: {section_id} in find and update request")
+
+    return section_id
+
+
+def delete_slack_page(page_id: str) -> str:
+    """
+    Deletes all Slack sections with given page id.
+    """
+    client = _get_mongo_client()
+    sections = _get_slack_sections()
+    with client.start_session() as session:
+        with session.start_transaction():
+            deleted_result = sections.delete_many(
+                _to_slack_find_request_dict(
+                    FindSlackSectionRequest(page_id=page_id)
+                )
+            )
+            if deleted_result.deleted_count < 1:
+                raise NotFoundException(
+                    f"Expected more than 1 slack section to be deleted, got {deleted_result.deleted_count} deleted")
+            logging.info(
+                f"Deleted {deleted_result.deleted_count} sections in page {page_id}")
+
+
 def insert_section_in_parent(child_section: SlackSection, parent_section_id: str, position: int) -> str:
     """
     Create Section and insert into given parent section at given position in a single transaction.
@@ -852,3 +995,17 @@ def write_inference_and_chat_messages_transactioanlly(if_result_model: Inference
                 bot_message_result.inserted_id)
             inference_results.insert_one(
                 if_result_model.model_dump(exclude=_exclude_id()))
+
+
+if __name__ == "__main__":
+    from flask import Flask
+    import os
+    app = Flask(__name__)
+    app.config.from_mapping(
+        MONGO_URI=os.environ['MONGO_URI'],
+        MONGO_DB_NAME='db',
+    )
+
+    with app.app_context():
+        delete_slack_page(page_id="65d091348f17feb42aae535d")
+        print("done")

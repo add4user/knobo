@@ -8,10 +8,17 @@ from userport.slack_models import (
 from userport.utils import get_slack_web_client, get_hostname_url, create_documentation_url
 from pydantic import BaseModel
 import userport.db
-from typing import List, Optional
+from typing import List
 import logging
 import json
 from celery import shared_task, chord
+from enum import Enum
+
+
+class Trigger(Enum):
+    SECTION_CREATION = 1
+    SECTION_EDIT = 2
+    IMPORT_DOC = 3
 
 
 class SectionInfo(BaseModel):
@@ -34,8 +41,8 @@ class SlackIndexingInfo(BaseModel):
     """
     # ID of user who initiated the request.
     user_id: str
-    # Whether request was for section creation or edit.
-    creation: bool
+    # Trigger for the request.
+    trigger: Trigger
     # Upload URL for the section
     upload_url: str
     # Current index of ordered sections list
@@ -76,7 +83,7 @@ class SlackPageIndexerAsync:
     """
 
     @staticmethod
-    def run_from_section_async(section_id: str, user_id: str, creation: bool):
+    def run_from_section_async(section_id: str, user_id: str, trigger: Trigger):
         """
         Run indexing from given section to all sections below it in the same page.
 
@@ -86,7 +93,7 @@ class SlackPageIndexerAsync:
         This method is async so do not rely on waiting for its completion at the callsite.
         """
         SlackPageIndexerAsync.notify_user_indexing_started(
-            user_id=user_id, creation=creation)
+            user_id=user_id, trigger=trigger)
 
         start_section: SlackSection = userport.db.get_slack_section(
             id=section_id)
@@ -128,7 +135,7 @@ class SlackPageIndexerAsync:
             section_info = SectionInfo(nouns_in_section=section.proper_nouns_in_section, section_text=SlackPageIndexerAsync._get_combined_markdown_text(
                 section), fnu_request=fnu_request)
             ordered_section_info_list.append(section_info)
-        indexing_info = SlackIndexingInfo(user_id=user_id, current_idx=start_index, creation=creation, upload_url=upload_url,
+        indexing_info = SlackIndexingInfo(user_id=user_id, current_idx=start_index, trigger=trigger, upload_url=upload_url,
                                           ordered_section_info_list=ordered_section_info_list, summary_of_sections_so_far=summary_of_sections_so_far)
 
         # Start workflow.
@@ -233,7 +240,7 @@ class SlackPageIndexerAsync:
 
         # Notify user that indexing is complete.
         SlackPageIndexerAsync.notify_user_indexing_complete(
-            user_id=indexing_info.user_id, creation=indexing_info.creation, upload_url=indexing_info.upload_url)
+            user_id=indexing_info.user_id, trigger=indexing_info.trigger, upload_url=indexing_info.upload_url)
         logging.info(f"Indexing complete")
 
     @shared_task
@@ -334,31 +341,42 @@ class SlackPageIndexerAsync:
         return f"{section.heading}\n\n{section.text}"
 
     @staticmethod
-    def notify_user_indexing_started(user_id: str, creation: bool):
+    def notify_user_indexing_started(user_id: str, trigger: Trigger):
         """
         Notify user via Slack that indexing has started. Message will be posted
         to user's DM with Knobo.
         """
         web_client = get_slack_web_client()
-        if creation:
+        if trigger == Trigger.SECTION_CREATION:
             # User has created section.
             web_client.chat_postEphemeral(channel=user_id, user=user_id,
                                           text="Section creation is in progress! I will ping you once it's done!")
-        else:
+        elif trigger == Trigger.SECTION_EDIT:
             # User has edited section.
             web_client.chat_postEphemeral(channel=user_id, user=user_id,
                                           text=f"Section Edit in progress! I will ping you once it's done!")
+        elif trigger == Trigger.IMPORT_DOC:
+            # User has imported a doc.
+            web_client.chat_postEphemeral(channel=user_id, user=user_id,
+                                          text=f"Document import in progress! I will ping you once it's done!")
+        else:
+            raise ValueError(f"Invalid trigger value found: {trigger}")
 
     @staticmethod
-    def notify_user_indexing_complete(user_id: str, creation: bool, upload_url: str):
+    def notify_user_indexing_complete(user_id: str, trigger: Trigger, upload_url: str):
         """
         Notify user via Slack that indexing has completed. Message will be posted
         to user's DM with Knobo.
         """
         web_client = get_slack_web_client()
-        if creation:
+        if trigger == Trigger.SECTION_CREATION:
             web_client.chat_postEphemeral(channel=user_id, user=user_id,
                                           text=f"Section creation complete! Available at {upload_url}")
-        else:
+        elif trigger == Trigger.SECTION_EDIT:
             web_client.chat_postEphemeral(channel=user_id, user=user_id,
                                           text=f"Section Edit complete! Updated section at: {upload_url}")
+        elif trigger == Trigger.IMPORT_DOC:
+            web_client.chat_postEphemeral(channel=user_id, user=user_id,
+                                          text=f"Document import is complete! You can find it here: {upload_url}")
+        else:
+            raise ValueError(f"Invalid trigger value found: {trigger}")

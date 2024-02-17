@@ -10,8 +10,7 @@ from dotenv import load_dotenv
 from flask import Blueprint, request, jsonify
 from userport.exceptions import APIException
 from pydantic import BaseModel, validator
-from userport.slack_page_indexer import SlackPageIndexer
-from userport.slack_page_indexer_async import SlackPageIndexerAsync
+from userport.slack_page_indexer_async import SlackPageIndexerAsync, Trigger
 from userport.slack_inference import SlackInference, SlackInferenceRequest
 from userport.slack_blocks import MessageBlock, RichTextBlock
 from userport.slack_modal_views import (
@@ -32,10 +31,13 @@ from userport.slack_modal_views import (
     GlobalShortcutPayload,
     EditDocViewFactory,
     EditDocBlockAction,
-    CommonContextPayload
+    CommonContextPayload,
+    ImportDocViewFactory,
+    ImportDocSubmissionPayload
 )
 from bson.objectid import ObjectId
 from userport.slack_html_gen import SlackHTMLGenerator
+from userport.slack_html_parser import SlackHTMLParser, SlackHTMLSection
 from userport.slack_models import (
     SlackUpload,
     SlackUploadStatus,
@@ -370,6 +372,9 @@ def handle_interactive_endpoint():
             elif global_shortcut_payload.get_callback_id() == GlobalShortcutPayload.EDIT_DOC_CALLBACK_ID:
                 edit_doc_from_common_context_in_background.delay(
                     CommonContextPayload(**payload_dict).model_dump_json(exclude_none=True))
+            elif global_shortcut_payload.get_callback_id() == GlobalShortcutPayload.IMPORT_DOC_CALLBACK_ID:
+                create_import_doc_view_in_background.delay(
+                    CommonContextPayload(**payload_dict).model_dump_json(exclude_none=True))
 
         elif payload.is_view_interaction():
             # Handle Modal View closing or submission.
@@ -428,6 +433,11 @@ def handle_interactive_endpoint():
                             **payload_dict).model_dump_json(exclude_none=True),
                         submission_payload.get_user_id()
                     )
+                elif submission_payload.get_view_title() == ImportDocViewFactory.get_view_title():
+                    import_doc_payload = ImportDocSubmissionPayload(
+                        **payload_dict)
+                    process_import_doc_in_background.delay(
+                        import_doc_payload.model_dump_json(exclude_none=True))
 
         elif payload.is_block_actions():
             # Handle Block Elements related updates within a view.
@@ -657,7 +667,85 @@ def update_edited_section_in_background(edit_doc_block_action_json: str, user_id
 
     # Re-index the page.
     SlackPageIndexerAsync.run_from_section_async(
-        section_id=section_id, user_id=user_id, creation=False)
+        section_id=section_id, user_id=user_id, trigger=Trigger.SECTION_EDIT)
+
+
+@shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})
+def create_import_doc_view_in_background(common_context_json: str):
+    """
+    User has requested to import external documentation, create the view and return it.
+    """
+    common_context_payload = CommonContextPayload(
+        **json.loads(common_context_json))
+
+    view = ImportDocViewFactory().create_initial_view()
+    web_client = get_slack_web_client()
+    web_client.views_open(
+        trigger_id=common_context_payload.get_trigger_id(), view=view.model_dump(exclude_none=True))
+
+
+@shared_task
+def process_import_doc_in_background(import_doc_json: str):
+    """
+    Process submission of import doc shortcut by downloading and indexing the page
+    in the URL.
+    """
+    import_doc_payload = ImportDocSubmissionPayload(
+        **json.loads(import_doc_json))
+
+    url = import_doc_payload.get_url().strip()
+    html_page: str = ""
+    try:
+        # Download URL.
+        html_page = userport.utils.fetch_html_page(url=url)
+    except Exception as e:
+        logging.error(f"Failed to fetch url: {url} with error: {e}")
+        # TODO: Notify user of failure.
+        return
+
+    parser = SlackHTMLParser()
+    try:
+        parser.parse(html_page=html_page, page_url=url)
+    except Exception as e:
+        logging.error(
+            f"Failed to parse HTML page with url: {url} with error: {e}")
+        # TODO: Notify user of failure.
+        return
+    root_html_section: SlackHTMLSection = parser.get_root_section()
+    html_sections_map: Dict[int, SlackHTMLSection] = parser.get_section_map()
+
+    # Create slack upload in db.
+    creator_id = import_doc_payload.get_user_id()
+    team_id = import_doc_payload.get_team_id()
+    team_domain = import_doc_payload.get_team_domain()
+    view_id = import_doc_payload.get_view_id()
+    upload_id: str = userport.db.create_slack_upload(
+        creator_id=creator_id, team_id=team_id, team_domain=team_domain, view_id=view_id)
+
+    logging.info(f"Upload complete for import doc url: {url}")
+
+    # Get creator email.
+    web_client = get_slack_web_client()
+    slack_response: SlackResponse = web_client.users_info(user=creator_id)
+    creator_email: str = UserInfoResponse(
+        **slack_response.data).get_email()
+
+    # Create a new page of SlackSections from parsed HTML sections.
+    page_id: str = userport.db.create_slack_sections_from_html_section(
+        root_section_int_id=root_html_section.id,
+        sections_map=html_sections_map,
+        upload_id=upload_id,
+        team_id=team_id,
+        team_domain=team_domain,
+        creator_id=creator_id,
+        creator_email=creator_email
+    )
+
+    logging.info(f"Section insertion complete for import doc url: {url}")
+
+    # Index the page.
+    # SlackPageIndexerAsync.run_from_section_async(
+    #     section_id=page_id, user_id=creator_id, trigger=Trigger.IMPORT_DOC)
 
 
 @shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})
@@ -802,7 +890,7 @@ def create_new_page_in_background(view_id: str, new_page_title: str):
         **slack_response.data).get_email()
 
     # Create Slack Section for both section and page.
-    page_html_section_id: str = userport.utils.convert_to_url_path_text(
+    page_html_section_id: str = userport.utils.to_urlsafe_path(
         text=new_page_title)
     page_section = SlackSection(
         upload_id=upload_id,
@@ -817,7 +905,7 @@ def create_new_page_in_background(view_id: str, new_page_title: str):
         html_section_id=page_html_section_id,
         page_html_section_id=page_html_section_id,
     )
-    child_html_section_id: str = userport.utils.convert_to_url_path_text(
+    child_html_section_id: str = userport.utils.to_urlsafe_path(
         text=section_heading_plain_text)
     child_section = SlackSection(
         upload_id=upload_id,
@@ -886,7 +974,7 @@ def create_section_inside_page_in_background(placed_doc_submission_json):
 
     # Create new section object and insert into parent section as child.
     page_section = userport.db.get_slack_section(id=page_id)
-    child_html_section_id: str = userport.utils.convert_to_url_path_text(
+    child_html_section_id: str = userport.utils.to_urlsafe_path(
         text=section_heading_plain_text)
     parent_section = userport.db.get_slack_section(id=parent_section_id)
     # Child heading level is 1+ parent heading level.
@@ -946,7 +1034,7 @@ def complete_new_section_upload_in_background(upload_id: str, section_id: str, u
 
     if slack_upload.status != SlackUploadStatus.COMPLETED:
         SlackPageIndexerAsync.run_from_section_async(
-            section_id=section_id, user_id=slack_upload.creator_id, creation=True)
+            section_id=section_id, user_id=slack_upload.creator_id, trigger=Trigger.SECTION_CREATION)
 
         # TODO: This should be after run_from_section is completed given that method is async.
         userport.db.update_slack_upload_status(
