@@ -1007,5 +1007,5 @@ if __name__ == "__main__":
     )
 
     with app.app_context():
-        delete_slack_page(page_id="65d091348f17feb42aae535d")
+        delete_slack_page(page_id="65d0d7b8fca5e60147f9319d")
         print("done")

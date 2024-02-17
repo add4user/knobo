@@ -69,9 +69,9 @@ class TextFormatting(BaseModel):
             # part of heading block.
             return text
 
-        # We want to replace '\n' within HTML with empty string
+        # We want to replace '\n' within HTML with whitespace string
         # otherwise formatting is off.
-        text = text.replace('\n', '')
+        text = text.replace('\n', ' ')
 
         if self.code:
             text = f'`{text}`'

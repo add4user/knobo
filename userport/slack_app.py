@@ -744,8 +744,8 @@ def process_import_doc_in_background(import_doc_json: str):
     logging.info(f"Section insertion complete for import doc url: {url}")
 
     # Index the page.
-    # SlackPageIndexerAsync.run_from_section_async(
-    #     section_id=page_id, user_id=creator_id, trigger=Trigger.IMPORT_DOC)
+    SlackPageIndexerAsync.run_from_section_async(
+        section_id=page_id, user_id=creator_id, trigger=Trigger.IMPORT_DOC)
 
 
 @shared_task(autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 5})
