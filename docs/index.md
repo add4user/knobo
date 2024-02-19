@@ -22,7 +22,7 @@ All these components have separate binaries in production. Unlike traditional mi
 
 All the components above (including the Postgres database and Kafka brokers) are deployed on **AWS (Amazon Web Services)** in production.
 
-System Architecture diagram: ![OStore System Architecture](https://docs.google.com/drawings/d/1dCK0lp1uRv7_bdoUuiP9lYmJCaJAO2DM7JEw1osYW48/edit?usp=sharing)
+System Architecture diagram: ![OStore System Architecture](/ostore-system-arch.jpg)
 
 ## Order placement flow
 
