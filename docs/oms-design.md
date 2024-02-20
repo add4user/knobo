@@ -1,6 +1,6 @@
 # Order Management Service
 
-The Order Management Service handles the processing and management of orders within the OStore application. It enables customers to place orders, tracks order status, manages order details, and calculates the total amount for each order. Additionally, it maintains associations between orders and the products included in each order through order items. The service facilitates order fulfillment by coordinating with other components, such as the [product catalog service](https://docs.google.com/document/d/1BgkNku_xJyYK3A6fLA3-yJ63BFBRI-hjP_oB8KsU9lk/edit), to ensure accurate inventory management and timely delivery to customers.
+The Order Management Service handles the processing and management of orders within the OStore application. It enables customers to place orders, tracks order status, manages order details, and calculates the total amount for each order. Additionally, it maintains associations between orders and the products included in each order through order items. The service facilitates order fulfillment by coordinating with other components, such as the [Product Catalog Service](/userport/pcs-design), to ensure accurate inventory management and timely delivery to customers.
 
 ## Data Model
 
