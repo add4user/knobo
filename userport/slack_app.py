@@ -741,7 +741,7 @@ def process_import_doc_in_background(import_doc_json: str):
         creator_email=creator_email
     )
 
-    logging.info(f"Section insertion complete for import doc url: {url}")
+    logging.info(f"Section insertion complete for import doc url: {url} and page ID: {page_id}")
 
     # Index the page.
     SlackPageIndexerAsync.run_from_section_async(

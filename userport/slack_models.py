@@ -241,8 +241,8 @@ class VS3Record(BaseModel):
     heading: str = Field(...)
     # Markdown formatted text associated with the section.
     text: str = Field(...)
-    # Summary of the text answer.
-    summary: str = Field(...)
+    # Summary of text from previous sections (excluding this section).
+    prev_sections_context: str = Field(...)
     # Slack Workspace Domain that the section is a part of.
     team_domain: str = Field(...)
     # HTML section ID of page that section residers under (needed for URL construction).

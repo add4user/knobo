@@ -840,7 +840,7 @@ def vector_search_slack_sections(team_id: str, user_query_vector_embedding: List
                 '_id': 1,
                 'heading': 1,
                 'text': 1,
-                'summary': 1,
+                'prev_sections_context': 1,
                 'team_domain': 1,
                 'page_html_section_id': 1,
                 'html_section_id': 1,

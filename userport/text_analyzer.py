@@ -194,14 +194,10 @@ class TextAnalyzer:
 
         return result
 
-    def answer_user_query(self, user_query: str, reference_text: str) -> LLMResult:
+    def answer_user_query(self, prompt: str) -> LLMResult:
         """
-        Answers user query using reference text as Knowledge base.
+        Answers user query provided in given prompt.
         """
-        prompt: str = self._create_section_result_prompt(
-            user_query=user_query, section_text=reference_text)
-        logging.info(f"Section result prompt: {prompt}")
-
         json_response = self._generate_response(
             prompt=prompt, json_response=True)
         llm_result = LLMResult(**json.loads(json_response))
@@ -359,19 +355,6 @@ class TextAnalyzer:
                       ' Do not mention the the Section number in the "answer" field.')
         formatted_text_list.append(prompt)
         return "\n".join(formatted_text_list)
-
-    def _create_section_result_prompt(self, user_query: str, section_text: str) -> str:
-        """
-        Returns prompt to check whether given section text answers user query.
-        """
-        return (f'{section_text}\n\n\n'
-                'User Query:\n'
-                f'{user_query}\n\n'
-                'Answer the User Query using only the information in the Markdown formatted text above.\n'
-                'Return the result as a JSON object with "information_found" as boolean field, "answer" as string field.\n'
-                'The "information_found" should be set to true only if the answer is found in the text and false otherwise.\n'
-                'The "answer" field should contain Markdown formatted text.'
-                )
 
     def process_nouns(self, nouns_list: List[str]) -> List[str]:
         """

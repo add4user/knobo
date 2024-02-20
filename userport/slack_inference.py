@@ -119,15 +119,18 @@ class SlackInference:
         request.vs3_result = vs3_result
 
         logging.info(
-            f"Vector search results: {[record.heading for record in vs3_result.records]}")
+            f"Vector search results: {[(record.heading, record.score) for record in vs3_result.records]}")
 
         # Use chord to compute multiple LLM results in parallel.
         llm_results_header = []
         for record in vs3_result.records:
+            # Set user_prev_context to False if you don't want to use context in prompt.
             llm_results_header.append(SlackInference.compute_llm_result_async.s(
                 user_query=request.user_query,
-                reference_text=SlackInference._get_combined_markdown_text(
-                    heading=record.heading, text=record.text),
+                heading=record.heading,
+                text=record.text,
+                prev_sections_context=record.prev_sections_context,
+                use_prev_context=True,
             ))
         callback = SlackInference.process_llm_results.s(
             request_json=request.model_dump_json())
@@ -214,17 +217,26 @@ class SlackInference:
         return text_analyzer.generate_vector_embedding(text=user_query)
 
     @shared_task
-    def compute_llm_result_async(user_query: str, reference_text: str) -> str:
+    def compute_llm_result_async(user_query: str, heading: str, text: str, prev_sections_context: str, use_prev_context: bool) -> str:
         """
-        Computes whether reference text contains answer to user query.
+        Computes whether given section,text and prev context contains answer to user query.
         We return a JSON string of LLMResult because it needds to be serialized
         in worker processes.
 
         Run in a celery task to make the operation aync.
         """
+        prompt: str = ""
+        if use_prev_context:
+            prompt = SlackInference._answer_query_with_context_prompt(
+                user_query=user_query, heading=heading, text=text, prev_sections_context=prev_sections_context)
+        else:
+            prompt = SlackInference._answer_query_without_context_prompt(
+                user_query=user_query, heading=heading, text=text)
+
+        # logging.info(f"Section result prompt:\n{prompt}")
+
         text_analyzer = TextAnalyzer(inference=True)
-        llm_result: LLMResult = text_analyzer.answer_user_query(
-            user_query=user_query, reference_text=reference_text)
+        llm_result: LLMResult = text_analyzer.answer_user_query(prompt=prompt)
         return llm_result.model_dump_json()
 
     @staticmethod
@@ -380,8 +392,47 @@ class SlackInference:
                 blocks=answer_dicts
             )
 
-    def _get_combined_markdown_text(heading: str, text: str) -> str:
+    def _get_combined_markdown_text(vs3_record: VS3Record) -> str:
         """
-        Returns markdown formatted text combining heading and text within a section.
+        Returns markdown formatted text combining prev section context, heading and text within a section.
         """
-        return f"{heading}\n\n{text}"
+        return (f'Previous Text Context:\n'
+                f'{vs3_record.prev_sections_context}\n\n'
+                f'Text:\n\n'
+                f'{vs3_record.heading}\n\n'
+                f'{vs3_record.text}'
+                )
+
+    @staticmethod
+    def _answer_query_without_context_prompt(user_query: str, heading: str, text: str) -> str:
+        """
+        Returns prompt to check whether given section heading and text answers user query.
+        """
+        return (f'Text:\n\n'
+                f'{heading}\n\n'
+                f'{text}\n\n'
+                'User Query:\n'
+                f'{user_query}\n\n'
+                'Answer the User Query using only the information in the Markdown formatted text above.\n'
+                'Return the result as a JSON object with "information_found" as boolean field, "answer" as string field.\n'
+                'The "information_found" should be set to true only if the answer is found in the text and false otherwise.\n'
+                'The "answer" field should contain Markdown formatted text.'
+                )
+
+    @staticmethod
+    def _answer_query_with_context_prompt(user_query: str, heading: str, text: str, prev_sections_context) -> str:
+        """
+        Returns prompt to check whether given section heading, text and prev section context answers user query.
+        """
+        return (f'Previous Text Context:\n'
+                f'{prev_sections_context}\n\n'
+                f'Text:\n\n'
+                f'{heading}\n\n'
+                f'{text}\n\n'
+                'User Query:\n'
+                f'{user_query}\n\n'
+                'Answer the User Query using only the information in the Markdown formatted text and its Context above.\n'
+                'Return the result as a JSON object with "information_found" as boolean field, "answer" as string field.\n'
+                'The "information_found" should be set to true only if the answer is found in the text or its context and false otherwise.\n'
+                'The "answer" field should contain Markdown formatted text.'
+                )
