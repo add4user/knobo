@@ -8,11 +8,11 @@ The system consists of the following components (servers).
 
 1. **Frontend Service:** Provides a user interface for browsing products, managing shopping cart and placing orders.
 
-2. [**Order Management Service:**](https://docs.google.com/document/d/1KCxn4jyPlwn9BfTKZ9WvunTGBCXtU83HgGAoaiUNwUM/edit#heading=h.3v4xlitgwdd0) Facilitates order processing, including order placement, payment processing, and order fulfillment.
+2. [**Order Management Service:**](/oms-design) Facilitates order processing, including order placement, payment processing, and order fulfillment.
 
-3. [**Product Catalog Service:**](https://docs.google.com/document/d/1BgkNku_xJyYK3A6fLA3-yJ63BFBRI-hjP_oB8KsU9lk/edit) Manages the inventory of products, including CRUD operations for products and categories.
+3. [**Product Catalog Service:**](/pcs-design) Manages the inventory of products, including CRUD operations for products and categories.
 
-4. [**Shipment Tracking Service:**](https://docs.google.com/document/d/1nQnRgZOElsoQNGIxm7awykEOghufbfk_3ZGITq4aipg/edit) Creates shipments for orders and manages the tracking of shipments.
+4. [**Shipment Tracking Service:**](/sts-design) Creates shipments for orders and manages the tracking of shipments.
 
 5. **User Notification Service:** Responsible for communicating with users over email or text messages. This service provides updates to users about their order statuses.
 
