@@ -346,8 +346,11 @@ class SlackHTMLParser:
         if self._is_link_tag(tag):
             # If we are in heading block,
             # skip parsing text inside link tag.
-            if self.cur_format.heading:
-                return
+            # TODO: Figure out why this is a problem
+            # when parsing Flask web page where including <a> link creates
+            # a problem. Please fix that.
+            # if self.cur_format.heading:
+            #     return
 
             self.cur_format.link = True
             self.cur_format.url = tag[self.HREF_ATTR]
@@ -409,8 +412,10 @@ class SlackHTMLParser:
         tag_heading_level = self._get_heading_level(htag)
         while parent_section and parent_section.heading_level >= tag_heading_level:
             if parent_section == self.root_section:
-                # This is the top most section, so we will make it the parent in this case.
-                return parent_section
+                # This is the top most section, let us replace it for demo video.
+                # TODO: Figure out better logic for first real heading of the page.
+                self.root_section = None
+                return None
             parent_section = self.all_sections_dict[parent_section.parent_id]
         if self.root_section and not parent_section:
             raise ValueError(
@@ -465,7 +470,8 @@ class SlackHTMLParser:
             img_tag), f"Expected image tag, got {img_tag}"
         assert self.SRC_ATTR in img_tag.attrs, f"'src' attribute not present in img tag: {img_tag}"
         alt_text: str = img_tag[self.ALT_ATTR] if self.ALT_ATTR in img_tag.attrs else 'image'
-        url: str = img_tag[self.SRC_ATTR]
+        # Create absolute URL to image.
+        url: str = urljoin(self.page_url, img_tag[self.SRC_ATTR])
         return f'![{alt_text}]({url})'
 
     def _get_heading_level(self, htag: Tag) -> int:
@@ -540,14 +546,15 @@ if __name__ == "__main__":
     # url = 'https://slack.com/intl/en-gb/help/articles/213185467-Convert-a-channel-to-private-or-public'
     # url = 'https://slack.com/intl/en-gb/help/articles/203950418-Use-a-canvas-in-Slack'
     # url = 'https://flask.palletsprojects.com/en/2.3.x/installation/#python-version'
-    url = 'https://flask.palletsprojects.com/en/2.3.x/tutorial/factory/'
+    # url = 'https://flask.palletsprojects.com/en/2.3.x/tutorial/factory/'
+    url = 'https://add4user.github.io/userport/'
     html_page = userport.utils.fetch_html_page(url)
 
     parser = SlackHTMLParser()
     content_start_class_for_slack = 'content_col'
     content_end_class_for_flask = 'clearer'
     parser.parse(html_page=html_page, page_url=url,
-                 content_start_class=None, content_end_class=content_end_class_for_flask)
+                 content_start_class=None, content_end_class=None)
 
     root_section = parser.get_root_section()
     section_map = parser.get_section_map()

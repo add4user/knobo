@@ -49,7 +49,7 @@ class SlackHTMLGenerator:
         """
         Helper to get index (sitemap) of page in HTML.
 
-        This will be a list of <a> links.
+        This will be a list of <a> links that will be listed on the left pane of the page.
         """
         slack_pages: List[SlackSection] = userport.db.get_slack_pages_within_team(
             team_domain=team_domain)

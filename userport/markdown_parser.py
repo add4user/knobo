@@ -360,12 +360,18 @@ class MarkdownToRichTextConverter:
         for match in strikethrough_matches:
             styled_index_intervals.append([match.start(), match.end()])
 
-        # TODO: Match image links which is ![text](url) as well.
+        # Image links which is of format ![text](url).
+        image_link_matches = re.finditer(
+            pattern=r'!\[([^\]]+)\]\(([^)]+)\)', string=text)
+        for match in image_link_matches:
+            styled_index_intervals.append([match.start(), match.end()])
+
         link_matches = re.finditer(
             pattern=r'\[([^\]]+)\]\(([^)]+)\)', string=text)
         for match in link_matches:
             styled_index_intervals.append([match.start(), match.end()])
 
+        # We compute non overlapping matches for the best result.
         non_overlapping_styled_intervals = self._get_non_overlapping_intervals(
             styled_index_intervals)
 
@@ -476,11 +482,22 @@ class MarkdownToRichTextConverter:
             text_object.url = url
             return self._create_styled_text_object(styled_text=link_text, text_object=text_object)
 
+        # Create Image match objects.
+        image_match = re.match(
+            pattern=r'!\[([^\]]+)\]\(([^)]+)\)|\[([^\]]+)\]\(([^)]+)\)', string=styled_text)
+        if image_match:
+            image_text = image_match.group(1)
+            image_url = image_match.group(2)
+            text_object.type = RichTextObject.TYPE_LINK
+            text_object.url = image_url
+            return self._create_styled_text_object(styled_text=image_text, text_object=text_object)
+
         if root_node:
             raise ValueError(
                 f"Invalid styled text: {styled_text} did not match any styles")
 
         # Plain text.
+        # TODO: Maybe skip setting this if styled_text is empty string?
         text_object.text = styled_text
         return text_object
 

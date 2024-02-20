@@ -129,7 +129,12 @@ class RichTextObject(BaseModel):
 
         # Add URL if any.
         if self.type == RichTextObject.TYPE_LINK:
-            text_val = f'<a href="{self.url}" target="_blank">{text_val}</a>'
+            if self.url.endswith('.jpg') or self.url.endswith('.png') or self.url.endswith('.jpeg'):
+                # Create image tag.
+                text_val = f'<img src="{self.url}" alt="{text_val}">'
+            else:
+                # Normal link.
+                text_val = f'<a href="{self.url}" target="_blank">{text_val}</a>'
 
         return text_val
 
