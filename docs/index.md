@@ -36,13 +36,13 @@ Here are the steps in the order placement flow:
 
 4. The frontend client receives the order request and forwards it to the order management service.
 
-5. The Order Management Service (OMS) receives the order details and calls the Product Catalog Service to check if there is enough quantity for each product in the cart.
+5. The Order Management Service (OMS) receives the order details and calls the Product Catalog Service (PCS) to check if there is enough quantity for each product in the cart.
 
 6. If there isn’t enough stock, then the Order Management Service (OMS) returns an error to the frontend server which in turns returns an error to the browser prompting the user to remove it from the cart.
 
-7. If there is enough stock, then the OMS calls the Shipment Tracking Service to create a shipment.
+7. If there is enough stock, then the OMS calls the Shipment Tracking Service (STS) to create a shipment.
 
-8. The Shipment Tracking Services creates a shipment with one of the carriers and returns the confirmation quickly to the OMS. At the same time, a queue job is enqueued by the Shipment Tracking Service to complete shipment processing. Once that processing is complete, another periodic queue job is created to track the shipment until it is delivered.
+8. The Shipment Tracking Services (STS) creates a shipment with one of the carriers and returns the confirmation quickly to the OMS. At the same time, a queue job is enqueued by the Shipment Tracking Service to complete shipment processing. Once that processing is complete, another periodic queue job is created to track the shipment until it is delivered.
 
 9. During shipment tracking, if the status of the order changes, the Shipment Tracking service produces an event to Kafka which is then consumed by the Order Management System. The OMS updates the User Notification Service which then sends the update to the user via an email or text message.
 

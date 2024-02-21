@@ -22,6 +22,7 @@ CREATE TABLE Shipments (
     orderID INT NOT NULL,
     shippingAddress TEXT NOT NULL,
     shipmentStatus VARCHAR(50) NOT NULL,
+    FOREIGN KEY (orderID) REFERENCES Orders(orderID)
 );
 
 CREATE TABLE Packages (
@@ -30,6 +31,7 @@ CREATE TABLE Packages (
     packageDimensions TEXT,
     packageWeight DECIMAL(10, 2),
     packageStatus VARCHAR(50) NOT NULL,
+    FOREIGN KEY (shipmentID) REFERENCES Shipments(shipmentID)
 );
 
 CREATE TABLE Carriers (
@@ -95,8 +97,11 @@ This data model enables the tracking system to efficiently manage and track ship
 
 ### Get Shipment Details
 **Endpoint:** `GET /shipments/{shipmentID}``
+
 **Description:** Retrieves details of a specific shipment.
+
 **Request Parameters:** The shipment ID parameter specifies the ID of the shipment whose details are to be retrieved.
+
 **Response Body (Success):**
 ```
 {
