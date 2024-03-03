@@ -196,7 +196,10 @@ class MarkdownToRichTextConverter:
         list_number = int(match.group(2))
         list_content: str = match.group(3)
 
-        assert num_leading_spaces % 4 == 0, f"Invalid number of spaces in indentation {repr(match.group(1))}"
+        # TODO: Sometimes there could be 3 spaces also which is technically not incorrect per
+        # https://stackoverflow.com/questions/53866598/markdown-list-indentation-with-3-spaces-or-4-spaces-what-is-the-standard.
+        # Fix this.
+        assert num_leading_spaces % 4 == 0, f"Invalid number of spaces: {num_leading_spaces} in indentation {repr(match.group(0))}"
         assert list_number >= 1, f"Invalid list number {list_number}"
 
         indent = int(num_leading_spaces/4)
@@ -241,7 +244,10 @@ class MarkdownToRichTextConverter:
         num_leading_spaces = len(match.group(1))
         list_content: str = match.group(3)
 
-        assert num_leading_spaces % 4 == 0, f"Invalid number of spaces in indentation {repr(match.group(1))}"
+        # TODO: Sometimes there could be 3 spaces also which is technically not incorrect per
+        # https://stackoverflow.com/questions/53866598/markdown-list-indentation-with-3-spaces-or-4-spaces-what-is-the-standard.
+        # Fix this.
+        assert num_leading_spaces % 4 == 0, f"Invalid number of spaces: {num_leading_spaces} in indentation {repr(match.group(0))}"
         indent = int(num_leading_spaces/4)
         section_element: RichTextSectionElement = RichTextSectionElement(
             elements=self._create_text_objects(list_content))

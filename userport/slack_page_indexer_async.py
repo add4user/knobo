@@ -350,15 +350,15 @@ class SlackPageIndexerAsync:
         if trigger == Trigger.SECTION_CREATION:
             # User has created section.
             web_client.chat_postEphemeral(channel=user_id, user=user_id,
-                                          text="Section creation is in progress! I will ping you once it's done!")
+                                          text="Section creation is in progress! It could take up to 10 minutes. I will ping you once it's done!")
         elif trigger == Trigger.SECTION_EDIT:
             # User has edited section.
             web_client.chat_postEphemeral(channel=user_id, user=user_id,
-                                          text=f"Section Edit in progress! I will ping you once it's done!")
+                                          text=f"Section Edit in progress! It could take up to 10 minutes. I will ping you once it's done!")
         elif trigger == Trigger.IMPORT_DOC:
             # User has imported a doc.
             web_client.chat_postEphemeral(channel=user_id, user=user_id,
-                                          text=f"Document import in progress! I will ping you once it's done!")
+                                          text=f"Document import in progress! It could take up to 10 minutes. I will ping you once it's done!")
         else:
             raise ValueError(f"Invalid trigger value found: {trigger}")
 

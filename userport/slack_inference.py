@@ -227,9 +227,11 @@ class SlackInference:
         """
         prompt: str = ""
         if use_prev_context:
+            logging.info("Using prev context in query prompt")
             prompt = SlackInference._answer_query_with_context_prompt(
                 user_query=user_query, heading=heading, text=text, prev_sections_context=prev_sections_context)
         else:
+            logging.info("No prev context in query prompt")
             prompt = SlackInference._answer_query_without_context_prompt(
                 user_query=user_query, heading=heading, text=text)
 
